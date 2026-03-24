@@ -1,0 +1,30 @@
+from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey
+from sqlalchemy.sql import func
+
+from database import Base
+
+class Video(Base):
+    __tablename__ = "videos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    path = Column(String, nullable=False, unique=True)
+    filename = Column(String, nullable=False)
+    recorded_at = Column(String, nullable=True)
+    duration_sec = Column(Float, nullable=True)
+    transcript_text = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class TranscriptSegment(Base):
+    __tablename__ = "transcript_segments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    video_id = Column(Integer, ForeignKey("videos.id"), nullable=False)
+    segment_index = Column(Integer, nullable=False)
+    start_ms = Column(Integer, nullable=False)
+    end_ms = Column(Integer, nullable=False)
+    original_text = Column(String, nullable=False)
+    corrected_text = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
