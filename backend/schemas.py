@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class VideoBase(BaseModel):
     path: str
     filename: str
+    title: str | None = None
     recorded_at: str | None = None
     duration_sec: float | None = None
     transcript_text: str | None = None
@@ -16,6 +17,7 @@ class VideoCreate(VideoBase):
 class VideoUpdate(BaseModel):
     path: str | None = None
     filename: str | None = None
+    title: str | None = None
     recorded_at: str | None = None
     duration_sec: float | None = None
     transcript_text: str | None = None

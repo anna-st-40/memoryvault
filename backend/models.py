@@ -9,6 +9,7 @@ class Video(Base):
     id = Column(Integer, primary_key=True, index=True)
     path = Column(String, nullable=False, unique=True)
     filename = Column(String, nullable=False)
+    title = Column(String, nullable=True)
     recorded_at = Column(String, nullable=True)
     duration_sec = Column(Float, nullable=True)
     transcript_text = Column(String, nullable=True)
