@@ -13,6 +13,7 @@ class Video(Base):
     recorded_at = Column(String, nullable=True)
     duration_sec = Column(Float, nullable=True)
     transcript_text = Column(String, nullable=True)
+    thumbnail_path = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

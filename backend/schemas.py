@@ -8,19 +8,21 @@ class VideoBase(BaseModel):
     recorded_at: str | None = None
     duration_sec: float | None = None
     transcript_text: str | None = None
+    thumbnail_path: str | None = None
 
 
 class VideoCreate(VideoBase):
     pass
 
 
-class VideoUpdate(BaseModel):
+class VideoPatch(BaseModel):
     path: str | None = None
     filename: str | None = None
     title: str | None = None
     recorded_at: str | None = None
     duration_sec: float | None = None
     transcript_text: str | None = None
+    thumbnail_path: str | None = None
 
 
 class Video(VideoBase):

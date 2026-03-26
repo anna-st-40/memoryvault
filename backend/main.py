@@ -1,4 +1,8 @@
+import os
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from database import Base, engine, get_db
@@ -10,18 +14,26 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="MemoryVault API", version="0.1.0")
 
+# Configure CORS
+# In production (Docker), requests come through nginx
+# In development, allow localhost origins
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
 
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to MemoryVault API"}
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+# Mount static files for thumbnails
+thumbnails_dir = os.path.join(os.path.dirname(__file__), "..", "thumbnails")
+os.makedirs(thumbnails_dir, exist_ok=True)
+app.mount("/thumbnails", StaticFiles(directory=thumbnails_dir), name="thumbnails")
 
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
+# --- Video Endpoints ---
 
-
-# CRUD endpoints for videos
 @app.post("/videos/", response_model=schemas.Video)
 def create_video(video: schemas.VideoCreate, db: Session = Depends(get_db)):
     db_video = models.Video(**video.model_dump())
@@ -33,7 +45,7 @@ def create_video(video: schemas.VideoCreate, db: Session = Depends(get_db)):
 
 @app.get("/videos/", response_model=list[schemas.Video])
 def read_videos(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    videos = db.query(models.Video).offset(skip).limit(limit).all()
+    videos = db.query(models.Video).order_by(models.Video.recorded_at.desc()).offset(skip).limit(limit).all()
     return videos
 
 
@@ -45,8 +57,8 @@ def read_video(video_id: int, db: Session = Depends(get_db)):
     return video
 
 
-@app.put("/videos/{video_id}", response_model=schemas.Video)
-def update_video(video_id: int, video: schemas.VideoUpdate, db: Session = Depends(get_db)):
+@app.patch("/videos/{video_id}", response_model=schemas.Video)
+def update_video(video_id: int, video: schemas.VideoPatch, db: Session = Depends(get_db)):
     db_video = db.query(models.Video).filter(models.Video.id == video_id).first()
     if db_video is None:
         raise HTTPException(status_code=404, detail="Video not found")
@@ -60,6 +72,16 @@ def update_video(video_id: int, video: schemas.VideoUpdate, db: Session = Depend
     return db_video
 
 
+@app.get("/videos/{video_id}/stream")
+def stream_video(video_id: int, db: Session = Depends(get_db)):
+    video = db.query(models.Video).filter(models.Video.id == video_id).first()
+    if video is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+    if not os.path.isfile(str(video.path)):
+        raise HTTPException(status_code=404, detail="Video file not found on disk")
+    return FileResponse(str(video.path), media_type="video/mp4")
+
+
 @app.delete("/videos/{video_id}")
 def delete_video(video_id: int, db: Session = Depends(get_db)):
     db_video = db.query(models.Video).filter(models.Video.id == video_id).first()
@@ -71,7 +93,8 @@ def delete_video(video_id: int, db: Session = Depends(get_db)):
     return {"message": "Video deleted successfully"}
 
 
-# CRUD endpoints for transcript segments
+# --- Transcript Segment Endpoints ---
+
 @app.post("/transcript-segments/", response_model=schemas.TranscriptSegment)
 def create_transcript_segment(segment: schemas.TranscriptSegmentCreate, db: Session = Depends(get_db)):
     db_segment = models.TranscriptSegment(**segment.model_dump())
