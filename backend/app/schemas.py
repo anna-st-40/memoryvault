@@ -1,5 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel
+from typing import Literal
 
 class VideoBase(BaseModel):
     path: str
@@ -60,3 +61,42 @@ class TranscriptSegment(TranscriptSegmentBase):
 
     class Config:
         from_attributes = True
+
+
+class SemanticMapPoint(BaseModel):
+    id: str
+    x: float
+    y: float
+    title: str
+    summary: str
+    date: str | None = None
+    duration_sec: float | None = None
+    thumbnail_url: str | None = None
+    video_url: str | None = None
+    cluster_label: str | None = None
+
+
+class SemanticMapReindexRequest(BaseModel):
+    mode: Literal["full", "incremental"] = "incremental"
+    limit: int | None = None
+
+
+class SemanticMapReindexResponse(BaseModel):
+    mode: Literal["full", "incremental"]
+    total_videos_considered: int
+    candidates_indexed: int
+    points_written: int
+    model_name: str
+    index_version: str
+    fallback_used: bool
+    fallback_reason: str | None = None
+    indexed_at: datetime
+
+
+class SemanticMapStatus(BaseModel):
+    total_videos: int
+    indexed_videos: int
+    missing_videos: int
+    latest_indexed_at: datetime | None = None
+    model_name: str | None = None
+    index_version: str | None = None

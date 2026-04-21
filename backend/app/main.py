@@ -5,9 +5,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
-from database import Base, engine, get_db
-import models
-import schemas
+from app.database import Base, engine, get_db
+from app import models, schemas
+from app.services.semantic_index import get_semantic_map_status, reindex_semantic_map
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -28,7 +28,7 @@ app.add_middleware(
 )
 
 # Mount static files for thumbnails
-thumbnails_dir = os.path.join(os.path.dirname(__file__), "..", "thumbnails")
+thumbnails_dir = os.path.join(os.path.dirname(__file__), "..", "..", "thumbnails")
 os.makedirs(thumbnails_dir, exist_ok=True)
 app.mount("/thumbnails", StaticFiles(directory=thumbnails_dir), name="thumbnails")
 
