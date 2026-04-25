@@ -2,11 +2,11 @@ FROM python:3.14-slim
 
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock* /app/
+COPY pyproject.toml poetry.lock ./
 
-RUN pip install poetry && poetry install --no-root
+RUN pip install poetry && poetry install --no-root --only main
 
-COPY . /app
+COPY . .
 
 EXPOSE 8000
 
