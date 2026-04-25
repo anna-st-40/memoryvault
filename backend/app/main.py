@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import Base, engine, get_db
 from app import models, schemas
-from app.services.semantic_index import get_semantic_map_status, reindex_semantic_map
+from app.services.semantic_indexing import get_semantic_map_status, reindex_semantic_map
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -31,6 +31,62 @@ app.add_middleware(
 thumbnails_dir = os.path.join(os.path.dirname(__file__), "..", "..", "thumbnails")
 os.makedirs(thumbnails_dir, exist_ok=True)
 app.mount("/thumbnails", StaticFiles(directory=thumbnails_dir), name="thumbnails")
+
+
+def _build_title(video: models.Video) -> str:
+    title = (video.title if isinstance(video.title, str) else None)
+    filename = (video.filename if isinstance(video.filename, str) else None)
+    video_id = getattr(video, "id", None)
+    return (title or filename or f"Video {video_id}").strip()
+
+
+def _build_summary(video: models.Video, max_len: int = 220) -> str:
+    transcript = video.transcript_text if isinstance(video.transcript_text, str) else ""
+    text = transcript.strip().replace("\n", " ")
+    if not text:
+        return ""
+    if len(text) <= max_len:
+        return text
+    return f"{text[:max_len].rstrip()}..."
+
+
+def _build_thumbnail_url(video: models.Video) -> str | None:
+    raw_thumbnail_path = getattr(video, "thumbnail_path", None)
+    thumbnail_path = raw_thumbnail_path.strip() if type(raw_thumbnail_path) is str else None
+    if not thumbnail_path:
+        return None
+    basename = os.path.basename(thumbnail_path)
+    if not basename:
+        return None
+    return f"/thumbnails/{basename}"
+
+
+def _to_semantic_map_point_from_index(
+    video: models.Video,
+    index_row: models.VideoSemanticIndex,
+) -> schemas.SemanticMapPoint:
+    video_id = getattr(video, "id", "")
+    map_x_raw = getattr(index_row, "map_x", 0.0)
+    map_y_raw = getattr(index_row, "map_y", 0.0)
+    map_x = float(map_x_raw) if isinstance(map_x_raw, (int, float)) else 0.0
+    map_y = float(map_y_raw) if isinstance(map_y_raw, (int, float)) else 0.0
+    summary_text = index_row.summary_text if isinstance(index_row.summary_text, str) else None
+    recorded_at = video.recorded_at if isinstance(video.recorded_at, str) else None
+    duration_sec = float(video.duration_sec) if isinstance(video.duration_sec, (int, float)) else None
+    cluster_label = index_row.cluster_label if isinstance(index_row.cluster_label, str) else None
+
+    return schemas.SemanticMapPoint(
+        id=str(video_id),
+        x=map_x,
+        y=map_y,
+        title=_build_title(video),
+        summary=(summary_text or _build_summary(video)),
+        date=recorded_at,
+        duration_sec=duration_sec,
+        thumbnail_url=_build_thumbnail_url(video),
+        video_url=f"/videos/{video_id}/stream",
+        cluster_label=cluster_label,
+    )
 
 # --- Video Endpoints ---
 
@@ -148,3 +204,37 @@ def delete_transcript_segment(segment_id: int, db: Session = Depends(get_db)):
     db.delete(db_segment)
     db.commit()
     return {"message": "Transcript segment deleted successfully"}
+
+# --- Semantic Map Endpoints ---
+
+@app.get("/semantic-map", response_model=list[schemas.SemanticMapPoint])
+def read_semantic_map_points(db: Session = Depends(get_db)):
+    videos = db.query(models.Video).order_by(models.Video.recorded_at.desc()).all()
+    indexed_rows = db.query(models.VideoSemanticIndex).all()
+    indexed_by_video_id = {row.video_id: row for row in indexed_rows}
+
+    missing = [video.id for video in videos if video.id not in indexed_by_video_id]
+    if missing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Semantic index is incomplete for {len(missing)} video(s). Run POST /semantic-map/reindex.",
+        )
+
+    points: list[schemas.SemanticMapPoint] = []
+    for video in videos:
+        index_row = indexed_by_video_id.get(video.id)
+        if index_row is None:
+            continue
+        points.append(_to_semantic_map_point_from_index(video, index_row))
+
+    return points
+
+
+@app.get("/semantic-map/status", response_model=schemas.SemanticMapStatus)
+def read_semantic_map_status(db: Session = Depends(get_db)):
+    return get_semantic_map_status(db)
+
+
+@app.post("/semantic-map/reindex", response_model=schemas.SemanticMapReindexResponse)
+def post_semantic_map_reindex(request: schemas.SemanticMapReindexRequest, db: Session = Depends(get_db)):
+    return reindex_semantic_map(db, mode=request.mode, limit=request.limit)
