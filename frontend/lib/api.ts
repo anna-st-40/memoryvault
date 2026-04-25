@@ -74,7 +74,7 @@ export async function updateVideo(
     video: VideoUpdate
 ): Promise<Video> {
     return apiFetch<Video>(`/videos/${videoId}`, {
-        method: 'PUT',
+        method: 'PATCH',
         body: JSON.stringify(video),
     });
 }

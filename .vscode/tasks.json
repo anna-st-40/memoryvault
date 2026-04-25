@@ -4,7 +4,7 @@
         {
             "label": "Start Backend",
             "type": "shell",
-            "command": "uvicorn app.main:app --reload",
+            "command": "poetry run uvicorn app.main:app --reload",
             "options": {
                 "cwd": "${workspaceFolder}/backend"
             },

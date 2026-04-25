@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import Header from '@/components/Header';
 import VideoCard from '@/components/VideoCard';
-import TimelineView from '@/components/TimelineView';
 import { getVideos } from '@/lib/api';
 import type { Video } from '@/lib/types';
 
@@ -12,7 +11,6 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [currentView, setCurrentView] = useState<'grid' | 'timeline'>('grid');
 
   useEffect(() => {
     async function fetchVideos() {
@@ -55,17 +53,9 @@ export default function Home() {
     setSearchQuery(query);
   };
 
-  const handleViewChange = (view: 'grid' | 'timeline') => {
-    setCurrentView(view);
-  };
-
   return (
     <div className="flex min-h-screen flex-col">
-      <Header
-        onSearch={handleSearch}
-        onViewChange={handleViewChange}
-        currentView={currentView}
-      />
+      <Header onSearch={handleSearch} />
 
       <main className="flex-1">
         <div className="container mx-auto max-w-screen-2xl px-4 py-8 sm:px-6 lg:px-8">
@@ -104,7 +94,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* Video grid or timeline */}
+          {/* Video grid */}
           {!loading && !error && filteredVideos.length > 0 && (
             <>
               {/* Results count */}
@@ -115,19 +105,11 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Grid view */}
-              {currentView === 'grid' && (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {filteredVideos.map((video) => (
-                    <VideoCard key={video.id} video={video} searchQuery={searchQuery} />
-                  ))}
-                </div>
-              )}
-
-              {/* Timeline view */}
-              {currentView === 'timeline' && (
-                <TimelineView videos={filteredVideos} searchQuery={searchQuery} />
-              )}
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {filteredVideos.map((video) => (
+                  <VideoCard key={video.id} video={video} searchQuery={searchQuery} />
+                ))}
+              </div>
             </>
           )}
         </div>

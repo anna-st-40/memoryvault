@@ -23,6 +23,7 @@ export interface VideoCreate {
     recorded_at?: string | null;
     duration_sec?: number | null;
     transcript_text?: string | null;
+    thumbnail_path?: string | null;
 }
 
 export interface VideoUpdate {
@@ -32,6 +33,7 @@ export interface VideoUpdate {
     recorded_at?: string | null;
     duration_sec?: number | null;
     transcript_text?: string | null;
+    thumbnail_path?: string | null;
 }
 
 export interface TranscriptSegment {
@@ -59,4 +61,17 @@ export interface TranscriptSegmentPatch {
     corrected_text?: string | null;
     start_ms?: number | null;
     end_ms?: number | null;
+}
+
+export interface SemanticMapPoint {
+    id: string;
+    x: number;
+    y: number;
+    title: string;
+    summary: string;
+    date?: string | null;
+    durationSec?: number | null;
+    thumbnailUrl?: string | null;
+    videoUrl?: string | null;
+    clusterLabel?: string | null;
 }
