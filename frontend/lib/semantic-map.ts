@@ -1,6 +1,6 @@
 import type { SemanticMapPoint } from './types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.API_URL || 'http://backend:8000';
 const DEFAULT_SEMANTIC_MAP_ENDPOINT = process.env.SEMANTIC_MAP_ENDPOINT || '/semantic-map';
 
 export type SemanticMapFetch = (
