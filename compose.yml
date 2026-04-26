@@ -9,10 +9,11 @@ services:
       # Do not edit the next line. To change the media location, edit MEDIA_DIR in the .env file
       - ${MEDIA_DIR}:/data
       - ./thumbnails:/app/thumbnails
-      - ./backend/app/app.db:/app/app/app.db
+      - ./database:/app/database
     environment:
       MEMORYVAULT_BASE: /data
       THUMBNAILS_DIR: /app/thumbnails
+      DATABASE_URL: sqlite:////app/database/app.db
       CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
       LOG_LEVEL: INFO
     ports:
