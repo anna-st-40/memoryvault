@@ -1,4 +1,6 @@
+import logging
 import os
+from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -8,6 +10,11 @@ from sqlalchemy.orm import Session
 from app.database import Base, engine, get_db
 from app import models, schemas
 from app.services.semantic_indexing import get_semantic_map_status, reindex_semantic_map
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -28,7 +35,7 @@ app.add_middleware(
 )
 
 # Mount static files for thumbnails
-thumbnails_dir = os.path.join(os.path.dirname(__file__), "..", "..", "thumbnails")
+thumbnails_dir = os.getenv("THUMBNAILS_DIR", str(Path(__file__).resolve().parent.parent / "thumbnails"))
 os.makedirs(thumbnails_dir, exist_ok=True)
 app.mount("/thumbnails", StaticFiles(directory=thumbnails_dir), name="thumbnails")
 
@@ -238,3 +245,40 @@ def read_semantic_map_status(db: Session = Depends(get_db)):
 @app.post("/semantic-map/reindex", response_model=schemas.SemanticMapReindexResponse)
 def post_semantic_map_reindex(request: schemas.SemanticMapReindexRequest, db: Session = Depends(get_db)):
     return reindex_semantic_map(db, mode=request.mode, limit=request.limit)
+
+
+# --- Scan Endpoints ---
+
+@app.post("/scan", status_code=202)
+def trigger_scan():
+    """Discover new files in raw/ and originals/ and queue them for processing."""
+    from app.services.scanner import discover_and_enqueue
+    enqueued = discover_and_enqueue()
+    return {"enqueued": enqueued, "message": "Processing started in background"}
+
+
+@app.get("/scan/status", response_model=schemas.ScanSummary)
+def get_scan_status(db: Session = Depends(get_db)):
+    from app.services.scanner import get_scan_summary
+    return get_scan_summary(db)
+
+
+@app.get("/scan/jobs", response_model=list[schemas.ScanJobStatus])
+def list_scan_jobs(
+    status: str | None = None,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.ScanJob)
+    if status:
+        query = query.filter(models.ScanJob.status == status)
+    return query.order_by(models.ScanJob.enqueued_at.desc()).offset(skip).limit(limit).all()
+
+
+@app.post("/scan/retry", status_code=202)
+def retry_scan_errors():
+    """Requeue all error-status scan jobs."""
+    from app.services.scanner import retry_failed_jobs
+    count = retry_failed_jobs()
+    return {"message": f"Requeued {count} failed jobs"}

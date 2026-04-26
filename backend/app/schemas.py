@@ -100,3 +100,27 @@ class SemanticMapStatus(BaseModel):
     latest_indexed_at: datetime | None = None
     model_name: str | None = None
     index_version: str | None = None
+
+
+class ScanJobStatus(BaseModel):
+    id: int
+    source_path: str
+    raw_path: str | None = None
+    needs_remux: bool
+    status: str
+    error_message: str | None = None
+    video_id: int | None = None
+    enqueued_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class ScanSummary(BaseModel):
+    total: int
+    pending: int
+    processing: int
+    done: int
+    error: int

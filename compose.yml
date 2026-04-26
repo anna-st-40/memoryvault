@@ -5,6 +5,18 @@ services:
       args:
         # To enable GPU: https://download.pytorch.org/whl/cu124
         TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
+    volumes:
+      # Do not edit the next line. To change the media location, edit MEDIA_DIR in the .env file
+      - ${MEDIA_DIR}:/data
+      - ./thumbnails:/app/thumbnails
+      - ./backend/app/app.db:/app/app/app.db
+    environment:
+      MEMORYVAULT_BASE: /data
+      THUMBNAILS_DIR: /app/thumbnails
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
 
   frontend:
     build: ./frontend

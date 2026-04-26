@@ -32,6 +32,21 @@ class TranscriptSegment(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
+class ScanJob(Base):
+    __tablename__ = "scan_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_path = Column(String, nullable=False, unique=True, index=True)
+    raw_path = Column(String, nullable=True)
+    needs_remux = Column(Integer, nullable=False, default=0)
+    status = Column(String, nullable=False, default="pending")
+    error_message = Column(String, nullable=True)
+    video_id = Column(Integer, ForeignKey("videos.id"), nullable=True)
+    enqueued_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class VideoSemanticIndex(Base):
     __tablename__ = "video_semantic_index"
 
