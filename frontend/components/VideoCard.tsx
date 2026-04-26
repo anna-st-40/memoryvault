@@ -67,7 +67,7 @@ function highlightQuery(text: string, query?: string): React.ReactNode {
 
 export default function VideoCard({ video, searchQuery }: VideoCardProps) {
     const excerpt = getTranscriptExcerpt(video.transcript_text, searchQuery);
-    const thumbnailUrl = video.id ? `http://localhost:8000/thumbnails/${video.id}.jpg` : null;
+    const thumbnailUrl = video.id ? `/api/thumbnails/${video.id}.jpg` : null;
 
     return (
         <Link href={`/videos/${video.id}`}>

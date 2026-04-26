@@ -1,0 +1,14 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      args:
+        # To enable GPU: https://download.pytorch.org/whl/cu124
+        TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
+
+  frontend:
+    build: ./frontend
+    environment:
+      API_URL: http://backend:8000
+    ports:
+      - "8765:3000"

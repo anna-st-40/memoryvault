@@ -218,7 +218,7 @@ export default function VideoDetailPage() {
                     <div className="flex-1 space-y-4">
                         <VideoPlayer
                             ref={videoPlayerRef}
-                            videoPath={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/videos/${video.id}/stream`}
+                            videoPath={`/api/videos/${video.id}/stream`}
                             currentTime={currentTime}
                             onTimeUpdate={setCurrentTime}
                         />

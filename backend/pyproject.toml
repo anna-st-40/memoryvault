@@ -13,12 +13,21 @@ dependencies = [
     "sqlalchemy (>=2.0.49,<3.0.0)",
     "numpy (>=2.4.4,<3.0.0)",
     "scikit-learn (>=1.8.0,<2.0.0)",
-    "torch (==2.11.0)",
     "sentence-transformers (==5.4.1)"
 ]
 
 [tool.poetry]
 packages = [{include = "memoryvault_backend", from = "src"}]
+
+# To build with GPU support, pass --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124
+# The Dockerfile will update this source URL before installing.
+[tool.poetry.group.torch.dependencies]
+torch = {version = "==2.11.0", source = "pytorch"}
+
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
