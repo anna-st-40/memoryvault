@@ -91,6 +91,29 @@ export async function getVideoTranscriptSegments(
     return apiFetch<TranscriptSegment[]>(`/videos/${videoId}/transcript-segments/`);
 }
 
+// --- Scan Endpoints ---
+
+export async function triggerScan(): Promise<{ enqueued: number; message: string }> {
+    return apiFetch<{ enqueued: number; message: string }>('/scan', { method: 'POST' });
+}
+
+// --- Semantic Map Endpoints ---
+
+export interface ReindexResponse {
+    mode: string;
+    processed: number;
+    skipped: number;
+    failed: number;
+    total_time_seconds: number;
+}
+
+export async function triggerReindex(mode: 'full' | 'incremental' = 'full'): Promise<ReindexResponse> {
+    return apiFetch<ReindexResponse>('/semantic-map/reindex', {
+        method: 'POST',
+        body: JSON.stringify({ mode }),
+    });
+}
+
 // --- Transcript Segment Endpoints ---
 
 export async function getTranscriptSegments(params?: {
