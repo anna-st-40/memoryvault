@@ -2,13 +2,14 @@
 
 import { useState, useRef, useEffect } from 'react';
 import type { TranscriptSegment } from '@/lib/types';
-import { updateTranscriptSegment } from '@/lib/api';
+import { updateTranscriptSegment, deleteTranscriptSegment } from '@/lib/api';
 
 interface TranscriptDisplayProps {
     segments: TranscriptSegment[];
     currentTime: number;
     onSegmentClick: (startMs: number) => void;
     onSegmentUpdate: (segment: TranscriptSegment) => void;
+    onSegmentDelete: (segmentId: number) => void;
 }
 
 interface TranscriptSegmentItemProps {
@@ -16,6 +17,7 @@ interface TranscriptSegmentItemProps {
     isActive: boolean;
     onClick: () => void;
     onUpdate: (segment: TranscriptSegment) => void;
+    onDelete: () => void;
 }
 
 function TranscriptSegmentItem({
@@ -23,12 +25,14 @@ function TranscriptSegmentItem({
     isActive,
     onClick,
     onUpdate,
+    onDelete,
 }: TranscriptSegmentItemProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [editedText, setEditedText] = useState(
         segment.corrected_text || segment.original_text
     );
     const [isSaving, setIsSaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const itemRef = useRef<HTMLDivElement>(null);
 
@@ -73,6 +77,19 @@ function TranscriptSegmentItem({
     const handleCancel = () => {
         setEditedText(segment.corrected_text || segment.original_text);
         setIsEditing(false);
+    };
+
+    const handleDelete = async () => {
+        if (!confirm('Delete this segment? This cannot be undone.')) return;
+        setIsDeleting(true);
+        try {
+            await deleteTranscriptSegment(segment.id);
+            onDelete();
+        } catch (error) {
+            console.error('Failed to delete segment:', error);
+            alert('Failed to delete segment. Please try again.');
+            setIsDeleting(false);
+        }
     };
 
     const displayText = segment.corrected_text || segment.original_text;
@@ -167,6 +184,27 @@ function TranscriptSegmentItem({
                                 />
                             </svg>
                         </button>
+                        <button
+                            onClick={handleDelete}
+                            disabled={isDeleting}
+                            className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-red-500 disabled:opacity-50 dark:hover:bg-zinc-800 dark:hover:text-red-400"
+                            title="Delete segment"
+                        >
+                            {isDeleting ? (
+                                <svg className="h-3.5 w-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12a8 8 0 018-8v8H4z" />
+                                </svg>
+                            ) : (
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                    />
+                                </svg>
+                            )}
+                        </button>
                     </div>
                 </div>
             )}
@@ -179,6 +217,7 @@ export default function TranscriptDisplay({
     currentTime,
     onSegmentClick,
     onSegmentUpdate,
+    onSegmentDelete,
 }: TranscriptDisplayProps) {
     const currentTimeMs = currentTime * 1000;
 
@@ -217,6 +256,7 @@ export default function TranscriptDisplay({
                             isActive={segment.id === activeSegmentId}
                             onClick={() => onSegmentClick(segment.start_ms)}
                             onUpdate={onSegmentUpdate}
+                            onDelete={() => onSegmentDelete(segment.id)}
                         />
                     ))}
                 </div>

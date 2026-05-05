@@ -237,6 +237,9 @@ export default function VideoDetailPage() {
                                     )
                                 );
                             }}
+                            onSegmentDelete={(segmentId: number) => {
+                                setSegments(segments.filter((s) => s.id !== segmentId));
+                            }}
                         />
                     </div>
                 </div>
