@@ -24,6 +24,7 @@ npm-debug.log*
 # Extra files
 thumbnails/
 test_vids/
+test_volume/
 process_demos/
 
 # OS
