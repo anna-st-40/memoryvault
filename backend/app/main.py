@@ -187,18 +187,37 @@ def read_video_transcript_segments(video_id: int, db: Session = Depends(get_db))
     return segments
 
 
+def _rebuild_transcript(video_id: int, db: Session) -> None:
+    segments = (
+        db.query(models.TranscriptSegment)
+        .filter(models.TranscriptSegment.video_id == video_id)
+        .order_by(models.TranscriptSegment.segment_index)
+        .all()
+    )
+    transcript = "".join(seg.corrected_text or seg.original_text for seg in segments)
+    db_video = db.query(models.Video).filter(models.Video.id == video_id).first()
+    if db_video is not None:
+        db_video.transcript_text = transcript
+        db.commit()
+
+
 @app.patch("/transcript-segments/{segment_id}", response_model=schemas.TranscriptSegment)
 def patch_transcript_segment(segment_id: int, segment: schemas.TranscriptSegmentPatch, db: Session = Depends(get_db)):
     db_segment = db.query(models.TranscriptSegment).filter(models.TranscriptSegment.id == segment_id).first()
     if db_segment is None:
         raise HTTPException(status_code=404, detail="Transcript segment not found")
-    
+
     update_data = segment.model_dump(exclude_unset=True)
+    if "corrected_text" in update_data and isinstance(update_data["corrected_text"], str):
+        if update_data["corrected_text"] and not update_data["corrected_text"].startswith(" "):
+            update_data["corrected_text"] = " " + update_data["corrected_text"]
+
     for key, value in update_data.items():
         setattr(db_segment, key, value)
-    
+
     db.commit()
     db.refresh(db_segment)
+    _rebuild_transcript(db_segment.video_id, db)
     return db_segment
 
 
@@ -207,9 +226,11 @@ def delete_transcript_segment(segment_id: int, db: Session = Depends(get_db)):
     db_segment = db.query(models.TranscriptSegment).filter(models.TranscriptSegment.id == segment_id).first()
     if db_segment is None:
         raise HTTPException(status_code=404, detail="Transcript segment not found")
-    
+
+    video_id = db_segment.video_id
     db.delete(db_segment)
     db.commit()
+    _rebuild_transcript(video_id, db)
     return {"message": "Transcript segment deleted successfully"}
 
 # --- Semantic Map Endpoints ---
