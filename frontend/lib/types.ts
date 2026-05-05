@@ -75,3 +75,24 @@ export interface SemanticMapPoint {
     videoUrl?: string | null;
     clusterLabel?: string | null;
 }
+
+export interface ScanJob {
+    id: number;
+    source_path: string;
+    raw_path: string | null;
+    needs_remux: boolean;
+    status: string;
+    error_message: string | null;
+    video_id: number | null;
+    enqueued_at: string;
+    started_at: string | null;
+    finished_at: string | null;
+}
+
+export interface ScanSummary {
+    total: number;
+    pending: number;
+    processing: number;
+    done: number;
+    error: number;
+}

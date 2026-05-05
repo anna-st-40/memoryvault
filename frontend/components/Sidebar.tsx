@@ -26,6 +26,15 @@ function MapIcon() {
     );
 }
 
+function JobsIcon() {
+    return (
+        <svg className="h-4.5 w-4.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+    );
+}
+
 function GearIcon() {
     return (
         <svg className="h-4.5 w-4.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -48,11 +57,10 @@ function NavItem({ href, active, collapsed, label, icon }: NavItemProps) {
         <Link
             href={href}
             title={collapsed ? label : undefined}
-            className={`flex items-center gap-2.5 rounded px-2 py-2 text-sm transition-colors ${
-                active
-                    ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50'
-                    : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50'
-            } ${collapsed ? 'justify-center' : ''}`}
+            className={`flex items-center gap-2.5 rounded px-2 py-2 text-sm transition-colors ${active
+                ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50'
+                : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50'
+                } ${collapsed ? 'justify-center' : ''}`}
         >
             {icon}
             {!collapsed && <span className="truncate">{label}</span>}
@@ -209,9 +217,8 @@ export default function Sidebar() {
     return (
         <>
             <aside
-                className={`relative flex h-screen shrink-0 flex-col overflow-hidden border-r border-zinc-200 bg-white transition-[width] duration-200 ease-in-out dark:border-zinc-800 dark:bg-zinc-950 ${
-                    collapsed ? 'w-14' : 'w-48'
-                }`}
+                className={`relative flex h-screen shrink-0 flex-col overflow-hidden border-r border-zinc-200 bg-white transition-[width] duration-200 ease-in-out dark:border-zinc-800 dark:bg-zinc-950 ${collapsed ? 'w-14' : 'w-48'
+                    }`}
             >
                 {/* Logo + toggle */}
                 <div className={`flex h-14 shrink-0 items-center border-b border-zinc-200 dark:border-zinc-800 ${collapsed ? 'justify-center' : 'justify-between px-3'}`}>
@@ -243,6 +250,8 @@ export default function Sidebar() {
                 <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
                     <NavItem href="/" active={pathname === '/'} collapsed={collapsed} label="Grid" icon={<GridIcon />} />
                     <NavItem href="/map" active={pathname.startsWith('/map')} collapsed={collapsed} label="Map" icon={<MapIcon />} />
+                    <div className="flex-1" />
+                    <NavItem href="/jobs" active={pathname.startsWith('/jobs')} collapsed={collapsed} label="Jobs" icon={<JobsIcon />} />
                 </nav>
 
                 {/* Settings trigger */}
@@ -251,11 +260,10 @@ export default function Sidebar() {
                         ref={settingsButtonRef}
                         onClick={openSettings}
                         title={collapsed ? 'Settings' : undefined}
-                        className={`flex w-full items-center gap-2.5 rounded px-2 py-2 text-sm transition-colors ${
-                            settingsOpen
-                                ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50'
-                                : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50'
-                        } ${collapsed ? 'justify-center' : ''}`}
+                        className={`flex w-full items-center gap-2.5 rounded px-2 py-2 text-sm transition-colors ${settingsOpen
+                            ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50'
+                            : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50'
+                            } ${collapsed ? 'justify-center' : ''}`}
                     >
                         <GearIcon />
                         {!collapsed && <span className="truncate">Settings</span>}

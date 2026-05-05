@@ -10,6 +10,8 @@ import type {
     TranscriptSegment,
     TranscriptSegmentCreate,
     TranscriptSegmentPatch,
+    ScanJob,
+    ScanSummary,
 } from './types';
 
 const API_BASE_URL = '/api';
@@ -95,6 +97,22 @@ export async function getVideoTranscriptSegments(
 
 export async function triggerScan(): Promise<{ enqueued: number; message: string }> {
     return apiFetch<{ enqueued: number; message: string }>('/scan', { method: 'POST' });
+}
+
+export async function getScanStatus(): Promise<ScanSummary> {
+    return apiFetch<ScanSummary>('/scan/status');
+}
+
+export async function getScanJobs(params?: { status?: string; limit?: number }): Promise<ScanJob[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.set('status', params.status);
+    if (params?.limit !== undefined) queryParams.set('limit', String(params.limit));
+    const query = queryParams.toString();
+    return apiFetch<ScanJob[]>(`/scan/jobs${query ? `?${query}` : ''}`);
+}
+
+export async function retryScanErrors(): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>('/scan/retry', { method: 'POST' });
 }
 
 // --- Semantic Map Endpoints ---
