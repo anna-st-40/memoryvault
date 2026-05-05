@@ -251,7 +251,7 @@ def post_semantic_map_reindex(request: schemas.SemanticMapReindexRequest, db: Se
 
 @app.post("/scan", status_code=202)
 def trigger_scan():
-    """Discover new files in raw/ and originals/ and queue them for processing."""
+    """Sort files from new/ into raw/ (and originals/ for MTS), then queue raw/ files for transcription."""
     from app.services.scanner import discover_and_enqueue
     enqueued = discover_and_enqueue()
     return {"enqueued": enqueued, "message": "Processing started in background"}

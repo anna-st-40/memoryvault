@@ -1,8 +1,16 @@
 """Background video scanner for MemoryVault.
 
-Discovers new video files in the raw/ and originals/ directories, then runs
-the full processing pipeline (remux if needed, Whisper transcription, thumbnail,
-DB insert) in a single-threaded ThreadPoolExecutor so it doesn't block the API.
+Discovers new video files in the new/ and raw/ directories, then runs
+the full processing pipeline (sort/remux if needed, Whisper transcription,
+thumbnail, DB insert) in a single-threaded ThreadPoolExecutor so it doesn't
+block the API.
+
+Directory roles:
+  new/        Drop zone. Files here are sorted on next scan:
+                - MTS  → remuxed MP4 goes to raw/, original MTS to originals/
+                - other → moved directly to raw/
+  raw/        Processed video files ready for transcription.
+  originals/  Archive of original MTS files (never scanned for transcription).
 """
 
 from __future__ import annotations
@@ -29,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 # --- Config ---
 _base = os.getenv("MEMORYVAULT_BASE", "/data")
+NEW_DIR: str = os.path.join(_base, "new")
 ORIGINALS_DIR: str = os.path.join(_base, "originals")
 RAW_DIR: str = os.path.join(_base, "raw")
 THUMBNAILS_DIR: str = os.getenv("THUMBNAILS_DIR", "/app/thumbnails")
@@ -219,7 +228,7 @@ def _generate_thumbnail(video_path: Path, output_path: Path, ts: float = 2.5) ->
 
 
 def _compute_raw_target(source_path: str) -> str:
-    """Return the expected raw/ destination path for a file from originals/."""
+    """Return the raw/ destination path for a file from new/."""
     p = Path(source_path)
     date_str = _parse_filename_date(p.name)
     year = date_str[:4] if date_str else "unknown"
@@ -227,12 +236,24 @@ def _compute_raw_target(source_path: str) -> str:
     return os.path.join(RAW_DIR, year, target_name)
 
 
+def _compute_originals_target(source_path: str) -> str:
+    """Return the originals/ archive path for an MTS file from new/."""
+    p = Path(source_path)
+    date_str = _parse_filename_date(p.name)
+    year = date_str[:4] if date_str else "unknown"
+    return os.path.join(ORIGINALS_DIR, year, p.name)
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 def discover_and_enqueue() -> int:
-    """Walk raw/ and originals/, create ScanJob rows for new files, submit to executor.
+    """Walk new/ and raw/, create ScanJob rows for new files, submit to executor.
+
+    Files in new/ are sorted first (MTS → remux to raw/ + archive to originals/,
+    others → move to raw/) before transcription.  Files already in raw/ are
+    transcribed directly.  originals/ is never scanned.
 
     Returns the count of newly enqueued jobs.
     """
@@ -243,10 +264,9 @@ def discover_and_enqueue() -> int:
 
         new_jobs: list[models.ScanJob] = []
 
-        # Scan originals/ for new files that need remuxing. 
-        # These will be processed in two stages: first remuxed into raw/, then the raw/ file will be transcribed and inserted into Video.
-        if os.path.isdir(ORIGINALS_DIR):
-            for dirpath, _, filenames in os.walk(ORIGINALS_DIR):
+        # Scan new/ — files here need to be sorted into raw/ (and originals/ for MTS).
+        if os.path.isdir(NEW_DIR):
+            for dirpath, _, filenames in os.walk(NEW_DIR):
                 for fname in filenames:
                     if Path(fname).suffix.lower() not in SCAN_EXTENSIONS:
                         continue
@@ -260,8 +280,7 @@ def discover_and_enqueue() -> int:
                         status="pending",
                     ))
 
-        # Scan raw/ for any new files.
-        # These are ready to process as-is, so raw_path=source_path and needs_remux=0.
+        # Scan raw/ for files that are already in place and just need transcription.
         if os.path.isdir(RAW_DIR):
             for dirpath, _, filenames in os.walk(RAW_DIR):
                 for fname in filenames:
@@ -352,25 +371,38 @@ def _process_job(job_id: int) -> None:
             _fail(db, job, "File failed stability check (size changed or file is empty)")
             return
 
-        # --- Prepare stage (originals/ files only) ---
+        # --- Prepare stage (new/ files only) ---
+        # Sort the file from new/ into its final location(s):
+        #   MTS  → remux MP4 to raw/, move original MTS to originals/
+        #   other → move directly to raw/
         if job.needs_remux:
             target_raw = _compute_raw_target(source_path)
+            ext = Path(source_path).suffix.lower()
 
-            if not os.path.exists(target_raw):
-                ext = Path(source_path).suffix.lower()
-                try:
-                    if ext == ".mts":
+            try:
+                if ext == ".mts":
+                    if not os.path.exists(target_raw):
                         _remux_mts(Path(source_path), Path(target_raw))
                         logger.info("Remuxed %s → %s", source_path, target_raw)
                     else:
+                        logger.info("Raw target already exists, skipping remux: %s", target_raw)
+
+                    # Archive the original MTS (idempotent — skip if already moved)
+                    originals_target = _compute_originals_target(source_path)
+                    if not os.path.exists(originals_target) and os.path.exists(source_path):
+                        Path(originals_target).parent.mkdir(parents=True, exist_ok=True)
+                        shutil.move(source_path, originals_target)
+                        logger.info("Archived original %s → %s", source_path, originals_target)
+                else:
+                    if not os.path.exists(target_raw):
                         Path(target_raw).parent.mkdir(parents=True, exist_ok=True)
                         shutil.move(source_path, target_raw)
                         logger.info("Moved %s → %s", source_path, target_raw)
-                except Exception as exc:
-                    _fail(db, job, f"Prepare stage failed: {exc}")
-                    return
-            else:
-                logger.info("Raw target already exists, skipping prepare: %s", target_raw)
+                    else:
+                        logger.info("Raw target already exists, skipping move: %s", target_raw)
+            except Exception as exc:
+                _fail(db, job, f"Prepare stage failed: {exc}")
+                return
 
             job.raw_path = target_raw
             db.commit()
