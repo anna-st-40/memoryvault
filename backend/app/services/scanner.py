@@ -268,6 +268,8 @@ def discover_and_enqueue() -> int:
         if os.path.isdir(NEW_DIR):
             for dirpath, _, filenames in os.walk(NEW_DIR):
                 for fname in filenames:
+                    if fname.startswith("._"):
+                        continue
                     if Path(fname).suffix.lower() not in SCAN_EXTENSIONS:
                         continue
                     full_path = os.path.join(dirpath, fname)
@@ -284,6 +286,8 @@ def discover_and_enqueue() -> int:
         if os.path.isdir(RAW_DIR):
             for dirpath, _, filenames in os.walk(RAW_DIR):
                 for fname in filenames:
+                    if fname.startswith("._"):
+                        continue
                     if Path(fname).suffix.lower() not in SCAN_EXTENSIONS:
                         continue
                     full_path = os.path.join(dirpath, fname)
