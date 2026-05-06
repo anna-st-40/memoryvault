@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +20,15 @@ logging.basicConfig(
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="MemoryVault API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from app.services.scanner import resume_incomplete_jobs
+    resume_incomplete_jobs()
+    yield
+
+
+app = FastAPI(title="MemoryVault API", version="0.1.0", lifespan=lifespan)
 
 # Configure CORS
 # In production (Docker), requests come through nginx

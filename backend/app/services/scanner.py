@@ -314,6 +314,34 @@ def discover_and_enqueue() -> int:
         db.close()
 
 
+def resume_incomplete_jobs() -> int:
+    """On startup, resubmit any jobs that never finished.
+
+    - pending:    never started (e.g. server restarted before the executor picked them up)
+    - processing: interrupted mid-run; reset to pending so _process_job starts clean
+    """
+    db: Session = SessionLocal()
+    try:
+        jobs = db.query(models.ScanJob).filter(
+            models.ScanJob.status.in_(["pending", "processing"])
+        ).all()
+        for job in jobs:
+            job.status = "pending"
+            job.started_at = None
+            job.finished_at = None
+        db.commit()
+        job_ids = [job.id for job in jobs]
+    finally:
+        db.close()
+
+    for job_id in job_ids:
+        _executor.submit(_process_job, job_id)
+
+    if job_ids:
+        logger.info("Resumed %d incomplete job(s) from previous session", len(job_ids))
+    return len(job_ids)
+
+
 def retry_failed_jobs() -> int:
     """Reset all error-status jobs to pending and resubmit to the executor."""
     db: Session = SessionLocal()
