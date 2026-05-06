@@ -124,3 +124,7 @@ class ScanSummary(BaseModel):
     processing: int
     done: int
     error: int
+
+
+class RetranscribeRequest(BaseModel):
+    language: str = "en"

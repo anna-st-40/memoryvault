@@ -154,6 +154,19 @@ def stream_video(video_id: int, db: Session = Depends(get_db)):
     return FileResponse(str(video.path), media_type="video/mp4")
 
 
+@app.post("/videos/{video_id}/retranscribe", status_code=202)
+def retranscribe_video(video_id: int, body: schemas.RetranscribeRequest, db: Session = Depends(get_db)):
+    """Re-run Whisper on an existing video with a different language, replacing all transcript data."""
+    video = db.query(models.Video).filter(models.Video.id == video_id).first()
+    if video is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+    if not os.path.isfile(str(video.path)):
+        raise HTTPException(status_code=404, detail="Video file not found on disk")
+    from app.services.scanner import enqueue_retranscribe
+    enqueue_retranscribe(video_id, str(video.path), body.language)
+    return {"message": "Re-transcription queued"}
+
+
 @app.delete("/videos/{video_id}")
 def delete_video(video_id: int, db: Session = Depends(get_db)):
     db_video = db.query(models.Video).filter(models.Video.id == video_id).first()

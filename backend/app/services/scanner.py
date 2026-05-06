@@ -41,6 +41,7 @@ NEW_DIR: str = os.path.join(_base, "new")
 ORIGINALS_DIR: str = os.path.join(_base, "originals")
 RAW_DIR: str = os.path.join(_base, "raw")
 THUMBNAILS_DIR: str = os.getenv("THUMBNAILS_DIR", "/app/thumbnails")
+WHISPER_LANGUAGE: str = os.getenv("WHISPER_LANGUAGE", "en")
 
 SCAN_EXTENSIONS: frozenset[str] = frozenset(
     {".mp4", ".mov", ".mts", ".mkv", ".avi", ".m4v", ".mpg", ".mpeg"}
@@ -107,15 +108,15 @@ def _is_stable(path: str) -> bool:
         return False
 
 
-def _transcribe(file_path: str, model_name: str = "turbo") -> dict[str, Any]:
+def _transcribe(file_path: str, model_name: str = "turbo", language: str = "en") -> dict[str, Any]:
     """Transcribe a video with Whisper, reusing the cached model."""
     import whisper  # noqa: PLC0415 — deferred import, slow to load
     if model_name not in _whisper_cache:
         logger.info("Loading Whisper model '%s'...", model_name)
         _whisper_cache[model_name] = whisper.load_model(model_name)
-    logger.info("Transcribing %s ...", file_path)
+    logger.info("Transcribing %s (language=%s) ...", file_path, language)
     return _whisper_cache[model_name].transcribe(
-        file_path, verbose=False, language="en", compression_ratio_threshold=2.0
+        file_path, verbose=False, language=language, compression_ratio_threshold=2.0
     )
 
 
@@ -453,7 +454,7 @@ def _process_job(job_id: int) -> None:
 
         # --- Transcription ---
         try:
-            transcription = _transcribe(raw_path)
+            transcription = _transcribe(raw_path, language=WHISPER_LANGUAGE)
         except Exception as exc:
             _fail(db, job, f"Transcription failed: {exc}")
             return
@@ -532,3 +533,53 @@ def _fail(db: Session, job: models.ScanJob, message: str) -> None:
     job.finished_at = datetime.now(timezone.utc)
     db.commit()
     logger.error("Job %d failed: %s", job.id, message)
+
+
+# ---------------------------------------------------------------------------
+# Re-transcription (replaces transcript for an existing video)
+# ---------------------------------------------------------------------------
+
+def enqueue_retranscribe(video_id: int, path: str, language: str) -> None:
+    _executor.submit(_retranscribe_job, video_id, path, language)
+
+
+def _retranscribe_job(video_id: int, path: str, language: str) -> None:
+    db: Session = SessionLocal()
+    try:
+        logger.info("Re-transcribing video id=%d with language=%s", video_id, language)
+        transcription = _transcribe(path, language=language)
+
+        metadata = _get_video_metadata(path)
+        duration = metadata.get("duration")
+        if duration is not None:
+            transcription = _trim_hallucinations(transcription, duration)
+
+        video = db.query(models.Video).filter(models.Video.id == video_id).first()
+        if video is None:
+            logger.error("Re-transcribe: video id=%d not found in DB", video_id)
+            return
+
+        # Replace transcript text
+        video.transcript_text = transcription.get("text", "")
+
+        # Replace all segments
+        db.query(models.TranscriptSegment).filter(
+            models.TranscriptSegment.video_id == video_id
+        ).delete()
+
+        for seg in transcription.get("segments", []):
+            db.add(models.TranscriptSegment(
+                video_id=video_id,
+                segment_index=int(seg["id"]),
+                start_ms=int(seg["start"] * 1000),
+                end_ms=int(seg["end"] * 1000),
+                original_text=str(seg["text"]),
+            ))
+
+        db.commit()
+        logger.info("Re-transcription complete for video id=%d", video_id)
+    except Exception:
+        logger.exception("Re-transcription failed for video id=%d", video_id)
+        db.rollback()
+    finally:
+        db.close()

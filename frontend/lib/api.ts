@@ -87,6 +87,16 @@ export async function deleteVideo(videoId: number): Promise<{ message: string }>
     });
 }
 
+export async function retranscribeVideo(
+    videoId: number,
+    language: string
+): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>(`/videos/${videoId}/retranscribe`, {
+        method: 'POST',
+        body: JSON.stringify({ language }),
+    });
+}
+
 export async function getVideoTranscriptSegments(
     videoId: number
 ): Promise<TranscriptSegment[]> {
