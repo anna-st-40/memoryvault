@@ -79,9 +79,9 @@ export default function JobsPage() {
     };
 
     return (
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 flex-col">
             {/* Header */}
-            <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-200 px-6 dark:border-zinc-800">
+            <div className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between border-b border-zinc-200 bg-zinc-50 px-6 dark:border-zinc-800 dark:bg-zinc-950">
                 <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Background Jobs</h1>
                 <div className="flex items-center gap-2">
                     {summary && summary.error > 0 && (
@@ -116,7 +116,7 @@ export default function JobsPage() {
                 </div>
             </div>
 
-            <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-6">
+            <div className="flex flex-col gap-4 p-6">
                 {/* Summary cards */}
                 {summary && (
                     <div className="grid grid-cols-4 gap-3">
