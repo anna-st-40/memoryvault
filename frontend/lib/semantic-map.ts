@@ -1,6 +1,9 @@
 import type { SemanticMapPoint } from './types';
 
 const API_BASE_URL = process.env.API_URL || 'http://backend:8000';
+// PUBLIC_API_URL is the URL the browser uses to load media (thumbnails, video).
+// It must be reachable from the client, unlike API_URL which may be an internal hostname.
+const PUBLIC_API_URL = process.env.PUBLIC_API_URL || API_BASE_URL;
 const DEFAULT_SEMANTIC_MAP_ENDPOINT = process.env.SEMANTIC_MAP_ENDPOINT || '/semantic-map';
 
 export type SemanticMapFetch = (
@@ -65,10 +68,10 @@ function resolveApiUrl(pathOrUrl: string | null): string | null {
     }
 
     if (pathOrUrl.startsWith('/')) {
-        return `${API_BASE_URL}${pathOrUrl}`;
+        return `${PUBLIC_API_URL}${pathOrUrl}`;
     }
 
-    return `${API_BASE_URL}/${pathOrUrl}`;
+    return `${PUBLIC_API_URL}/${pathOrUrl}`;
 }
 
 function adaptPoint(raw: RawSemanticMapPoint): SemanticMapPoint | null {

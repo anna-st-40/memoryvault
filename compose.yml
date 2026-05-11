@@ -23,5 +23,6 @@ services:
     build: ./frontend
     environment:
       API_URL: http://backend:8000
+      PUBLIC_API_URL: http://localhost:8000
     ports:
       - "8765:3000"
