@@ -6,6 +6,9 @@ import type { Video } from '@/lib/types';
 interface VideoCardProps {
     video: Video;
     searchQuery?: string;
+    editMode?: boolean;
+    selected?: boolean;
+    onToggleSelect?: () => void;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -32,7 +35,6 @@ function formatDate(dateString: string | null): string {
 function getTranscriptExcerpt(transcript: string | null, query?: string): string {
     if (!transcript) return 'No transcript available';
 
-    // If there's a search query, try to show context around the match
     if (query && query.length > 0) {
         const lowerTranscript = transcript.toLowerCase();
         const lowerQuery = query.toLowerCase();
@@ -46,7 +48,6 @@ function getTranscriptExcerpt(transcript: string | null, query?: string): string
         }
     }
 
-    // Default: show first 120 characters
     return transcript.length > 120 ? transcript.slice(0, 120) + '...' : transcript;
 }
 
@@ -65,71 +66,96 @@ function highlightQuery(text: string, query?: string): React.ReactNode {
     );
 }
 
-export default function VideoCard({ video, searchQuery }: VideoCardProps) {
+export default function VideoCard({ video, searchQuery, editMode, selected, onToggleSelect }: VideoCardProps) {
     const excerpt = getTranscriptExcerpt(video.transcript_text, searchQuery);
     const thumbnailUrl = video.id ? `/api/thumbnails/${video.id}.jpg` : null;
 
+    const borderClass = editMode && selected
+        ? 'border-blue-500 dark:border-blue-400'
+        : 'border-zinc-200 hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600';
+
+    const cardContent = (
+        <div className={`group overflow-hidden rounded-lg border bg-white transition-colors dark:bg-zinc-900 ${borderClass}`}>
+            {/* Thumbnail */}
+            <div className="relative aspect-video w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
+                {editMode && (
+                    <div className="absolute right-2 top-2 z-10">
+                        {selected ? (
+                            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500">
+                                <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                            </div>
+                        ) : (
+                            <div className="h-5 w-5 rounded-full border-2 border-white bg-black/30" />
+                        )}
+                    </div>
+                )}
+
+                {thumbnailUrl && video.thumbnail_path ? (
+                    <img
+                        src={thumbnailUrl}
+                        alt={video.title ?? video.filename}
+                        className="absolute inset-0 h-full w-full object-cover"
+                    />
+                ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <svg
+                            className="h-10 w-10 text-zinc-300 dark:text-zinc-600"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={1.5}
+                                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                            />
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={1.5}
+                                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                        </svg>
+                    </div>
+                )}
+
+                {/* Duration badge */}
+                {video.duration_sec && (
+                    <div className="absolute bottom-2 right-2 rounded bg-black/60 px-2 py-0.5 text-xs text-white">
+                        {formatDuration(video.duration_sec)}
+                    </div>
+                )}
+            </div>
+
+            {/* Content */}
+            <div className="p-4">
+                <h3 className="mb-1 line-clamp-1 text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                    {video.title ?? video.filename}
+                </h3>
+                <p className="mb-3 text-xs text-zinc-400 dark:text-zinc-500">
+                    {formatDate(video.recorded_at)}
+                </p>
+                <p className="line-clamp-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    {highlightQuery(excerpt, searchQuery)}
+                </p>
+            </div>
+        </div>
+    );
+
+    if (editMode) {
+        return (
+            <div className="cursor-pointer" onClick={onToggleSelect}>
+                {cardContent}
+            </div>
+        );
+    }
+
     return (
         <Link href={`/videos/${video.id}`}>
-            <div className="group overflow-hidden rounded-lg border border-zinc-200 bg-white transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-600">
-                {/* Thumbnail */}
-                <div className="relative aspect-video w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
-                    {thumbnailUrl && video.thumbnail_path ? (
-                        <img
-                            src={thumbnailUrl}
-                            alt={video.title ?? video.filename}
-                            className="absolute inset-0 h-full w-full object-cover"
-                        />
-                    ) : (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <svg
-                                className="h-10 w-10 text-zinc-300 dark:text-zinc-600"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={1.5}
-                                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                                />
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={1.5}
-                                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                />
-                            </svg>
-                        </div>
-                    )}
-
-                    {/* Duration badge */}
-                    {video.duration_sec && (
-                        <div className="absolute bottom-2 right-2 rounded bg-black/60 px-2 py-0.5 text-xs text-white">
-                            {formatDuration(video.duration_sec)}
-                        </div>
-                    )}
-                </div>
-
-                {/* Content */}
-                <div className="p-4">
-                    {/* Title */}
-                    <h3 className="mb-1 line-clamp-1 text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                        {video.title ?? video.filename}
-                    </h3>
-
-                    {/* Date */}
-                    <p className="mb-3 text-xs text-zinc-400 dark:text-zinc-500">
-                        {formatDate(video.recorded_at)}
-                    </p>
-
-                    {/* Transcript excerpt */}
-                    <p className="line-clamp-2 text-xs text-zinc-500 dark:text-zinc-400">
-                        {highlightQuery(excerpt, searchQuery)}
-                    </p>
-                </div>
-            </div>
+            {cardContent}
         </Link>
     );
 }

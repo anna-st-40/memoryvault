@@ -128,3 +128,9 @@ class ScanSummary(BaseModel):
 
 class RetranscribeRequest(BaseModel):
     language: str = "en"
+
+
+class ConcatenateRequest(BaseModel):
+    video_ids: list[int]
+    output_filename: str
+    title: str | None = None

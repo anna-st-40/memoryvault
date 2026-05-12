@@ -2,6 +2,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+import subprocess
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -172,10 +173,152 @@ def delete_video(video_id: int, db: Session = Depends(get_db)):
     db_video = db.query(models.Video).filter(models.Video.id == video_id).first()
     if db_video is None:
         raise HTTPException(status_code=404, detail="Video not found")
-    
+
     db.delete(db_video)
     db.commit()
     return {"message": "Video deleted successfully"}
+
+
+@app.post("/videos/concatenate", response_model=schemas.Video)
+def concatenate_videos(req: schemas.ConcatenateRequest, db: Session = Depends(get_db)):
+    """Concatenate multiple videos into one using ffmpeg concat demuxer."""
+    import shutil
+    import tempfile
+    from pathlib import Path
+    from app.services.scanner import _parse_filename_title, RAW_DIR
+
+    if len(req.video_ids) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 video IDs are required")
+
+    videos = db.query(models.Video).filter(models.Video.id.in_(req.video_ids)).all()
+    if len(videos) != len(req.video_ids):
+        found_ids = {v.id for v in videos}
+        missing = [vid for vid in req.video_ids if vid not in found_ids]
+        raise HTTPException(status_code=404, detail=f"Videos not found: {missing}")
+
+    for v in videos:
+        if not os.path.isfile(str(v.path)):
+            raise HTTPException(status_code=400, detail=f"File not found on disk for video {v.id}: {v.path}")
+
+    video_by_id = {v.id: v for v in videos}
+    ordered = [video_by_id[vid] for vid in req.video_ids]
+    first_video = ordered[0]
+    last_video = ordered[-1]
+
+    year = str(last_video.recorded_at)[:4] if last_video.recorded_at else "unknown"
+    output_path = os.path.join(RAW_DIR, year, req.output_filename)
+
+    if os.path.exists(output_path):
+        raise HTTPException(status_code=409, detail=f"Output file already exists: {output_path}")
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tf:
+            list_path = tf.name
+            for v in ordered:
+                tf.write(f"file '{v.path}'\n")
+
+        result = subprocess.run(
+            ["ffmpeg", "-f", "concat", "-safe", "0", "-i", list_path, "-c", "copy", output_path],
+            capture_output=True, text=True,
+        )
+        os.unlink(list_path)
+        if result.returncode != 0:
+            if os.path.exists(output_path):
+                os.remove(output_path)
+            raise HTTPException(status_code=500, detail=f"ffmpeg failed: {result.stderr[-2000:]}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        raise HTTPException(status_code=500, detail=f"Concatenation error: {exc}") from exc
+
+    all_segments: list[tuple[models.Video, list[models.TranscriptSegment]]] = []
+    for v in ordered:
+        segs = (
+            db.query(models.TranscriptSegment)
+            .filter(models.TranscriptSegment.video_id == v.id)
+            .order_by(models.TranscriptSegment.segment_index)
+            .all()
+        )
+        all_segments.append((v, segs))
+
+    combined_transcript = "".join(
+        seg.corrected_text or seg.original_text
+        for _, segs in all_segments
+        for seg in segs
+    )
+
+    total_duration: float | None = None
+    if all(v.duration_sec is not None for v in ordered):
+        total_duration = sum(float(v.duration_sec) for v in ordered)  # type: ignore[arg-type]
+
+    new_video = models.Video(
+        path=output_path,
+        filename=req.output_filename,
+        title=req.title if req.title is not None else _parse_filename_title(req.output_filename),
+        recorded_at=last_video.recorded_at,
+        duration_sec=total_duration,
+        transcript_text=combined_transcript,
+        thumbnail_path=None,
+    )
+    db.add(new_video)
+    db.flush()
+
+    thumbnail_src = Path(thumbnails_dir) / f"{first_video.id}.jpg"
+    if thumbnail_src.is_file():
+        thumbnail_dst = Path(thumbnails_dir) / f"{new_video.id}.jpg"
+        try:
+            shutil.copy2(str(thumbnail_src), str(thumbnail_dst))
+            new_video.thumbnail_path = str(thumbnail_dst)
+        except Exception as exc:
+            logging.warning("Could not copy thumbnail for new video %d: %s", new_video.id, exc)
+
+    db.commit()
+    db.refresh(new_video)
+
+    seg_index = 0
+    offset_ms = 0
+    for v, segs in all_segments:
+        for seg in segs:
+            db.add(models.TranscriptSegment(
+                video_id=new_video.id,
+                segment_index=seg_index,
+                start_ms=seg.start_ms + offset_ms,
+                end_ms=seg.end_ms + offset_ms,
+                original_text=seg.original_text,
+                corrected_text=seg.corrected_text,
+            ))
+            seg_index += 1
+        offset_ms += round((v.duration_sec or 0) * 1000)
+    db.commit()
+
+    for v in ordered:
+        vid_id = v.id
+        vid_path = str(v.path)
+        thumb_path = str(v.thumbnail_path) if v.thumbnail_path else None
+
+        db.query(models.TranscriptSegment).filter(models.TranscriptSegment.video_id == vid_id).delete()
+        db.query(models.VideoSemanticIndex).filter(models.VideoSemanticIndex.video_id == vid_id).delete()
+        db.query(models.ScanJob).filter(models.ScanJob.video_id == vid_id).update({"video_id": None})
+        db.delete(v)
+        db.commit()
+
+        try:
+            os.remove(vid_path)
+        except OSError as exc:
+            logging.warning("Could not delete video file %s: %s", vid_path, exc)
+
+        if thumb_path and os.path.isfile(thumb_path):
+            try:
+                os.remove(thumb_path)
+            except OSError as exc:
+                logging.warning("Could not delete thumbnail %s: %s", thumb_path, exc)
+
+    db.refresh(new_video)
+    return new_video
 
 
 # --- Transcript Segment Endpoints ---

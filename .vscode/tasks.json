@@ -6,7 +6,10 @@
             "type": "shell",
             "command": "poetry run uvicorn app.main:app --reload",
             "options": {
-                "cwd": "${workspaceFolder}/backend"
+                "cwd": "${workspaceFolder}/backend",
+                "env": {
+                    "MEMORYVAULT_BASE": "${workspaceFolder}/test_volume"
+                }
             },
             "isBackground": true,
             "problemMatcher": []

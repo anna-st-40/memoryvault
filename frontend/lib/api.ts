@@ -97,6 +97,17 @@ export async function retranscribeVideo(
     });
 }
 
+export async function concatenateVideos(
+    videoIds: number[],
+    outputFilename: string,
+    title?: string,
+): Promise<Video> {
+    return apiFetch<Video>('/videos/concatenate', {
+        method: 'POST',
+        body: JSON.stringify({ video_ids: videoIds, output_filename: outputFilename, title: title || null }),
+    });
+}
+
 export async function getVideoTranscriptSegments(
     videoId: number
 ): Promise<TranscriptSegment[]> {
