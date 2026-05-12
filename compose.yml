@@ -1,5 +1,6 @@
 services:
   backend:
+    restart: unless-stopped
     build:
       context: ./backend
       args:
@@ -20,6 +21,7 @@ services:
       - "8000:8000"
 
   frontend:
+    restart: unless-stopped
     build: ./frontend
     environment:
       API_URL: http://backend:8000
