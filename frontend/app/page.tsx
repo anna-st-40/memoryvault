@@ -18,7 +18,7 @@ export default function Home() {
     async function fetchVideos() {
       try {
         setLoading(true);
-        const data = await getVideos({ limit: 100 });
+        const data = await getVideos();
         setVideos(data);
         setError(null);
         setBackendDown(false);

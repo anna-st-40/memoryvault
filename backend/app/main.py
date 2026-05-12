@@ -116,7 +116,7 @@ def create_video(video: schemas.VideoCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/videos/", response_model=list[schemas.Video])
-def read_videos(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_videos(skip: int = 0, limit: int | None = None, db: Session = Depends(get_db)):
     videos = db.query(models.Video).order_by(models.Video.recorded_at.desc()).offset(skip).limit(limit).all()
     return videos
 
