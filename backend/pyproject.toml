@@ -11,10 +11,6 @@ dependencies = [
     "fastapi (>=0.136.0,<0.137.0)",
     "uvicorn (>=0.44.0,<0.45.0)",
     "sqlalchemy (>=2.0.49,<3.0.0)",
-    "numpy (>=2.4.4,<3.0.0)",
-    "scikit-learn (>=1.8.0,<2.0.0)",
-    "whisperx",
-    "sentence-transformers>=2.2.0,<4.0.0",
 ]
 
 [tool.poetry]

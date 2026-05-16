@@ -5,10 +5,10 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from .. import models, schemas
+from memoryvault_shared import models
 
 # Note: Increment the version when making changes that affect the geometry or embedding semantics, to trigger reindexing.
-PIPELINE_VERSION = "phase2-v0"
+PIPELINE_VERSION = "v0"
 
 DEFAULT_MODEL_NAME = os.getenv("SEMANTIC_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
@@ -27,11 +27,7 @@ def _source_hash(video: models.Video) -> str:
     transcript = video.transcript_text if isinstance(video.transcript_text, str) else ""
     title = video.title if isinstance(video.title, str) else ""
     filename = video.filename if isinstance(video.filename, str) else ""
-    source = "|".join([
-        transcript.strip(),
-        title.strip(),
-        filename.strip(),
-    ])
+    source = "|".join([transcript.strip(), title.strip(), filename.strip()])
     return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
@@ -75,7 +71,7 @@ def reindex_semantic_map(
     db: Session,
     mode: str = "incremental",
     limit: int | None = None,
-) -> schemas.SemanticMapReindexResponse:
+) -> dict:
     videos = db.query(models.Video).order_by(models.Video.id.asc()).all()
     indexed_by_video_id = {
         row.video_id: row for row in db.query(models.VideoSemanticIndex).all()
@@ -102,26 +98,25 @@ def reindex_semantic_map(
     if limit is not None:
         candidates = candidates[: max(limit, 0)]
 
-    if not candidates:
-        now = datetime.now(timezone.utc)
-        return schemas.SemanticMapReindexResponse(
-            mode="full" if mode == "full" else "incremental",
-            total_videos_considered=len(videos),
-            candidates_indexed=0,
-            points_written=0,
-            model_name=DEFAULT_MODEL_NAME,
-            index_version=PIPELINE_VERSION,
-            fallback_used=False,
-            fallback_reason=None,
-            indexed_at=now,
-        )
+    now = datetime.now(timezone.utc)
 
-    # Recompute projection/clustering for the full active set to keep geometry coherent.
+    if not candidates:
+        return {
+            "mode": "full" if mode == "full" else "incremental",
+            "total_videos_considered": len(videos),
+            "candidates_indexed": 0,
+            "points_written": 0,
+            "model_name": DEFAULT_MODEL_NAME,
+            "index_version": PIPELINE_VERSION,
+            "fallback_used": False,
+            "fallback_reason": None,
+            "indexed_at": now.isoformat(),
+        }
+
     active_videos = videos
     source_texts = [_build_source_text(video) for video in active_videos]
     vectors = _embed_texts(source_texts)
 
-    now = datetime.now(timezone.utc)
     written = 0
 
     for video, vector_bundle in zip(active_videos, vectors):
@@ -148,41 +143,14 @@ def reindex_semantic_map(
 
     db.commit()
 
-    return schemas.SemanticMapReindexResponse(
-        mode="full" if mode == "full" else "incremental",
-        total_videos_considered=len(videos),
-        candidates_indexed=len(candidates),
-        points_written=written,
-        model_name=DEFAULT_MODEL_NAME,
-        index_version=PIPELINE_VERSION,
-        fallback_used=False,
-        fallback_reason=None,
-        indexed_at=now,
-    )
-
-
-def get_semantic_map_status(db: Session) -> schemas.SemanticMapStatus:
-    total_videos = db.query(models.Video).count()
-    indexed_rows = db.query(models.VideoSemanticIndex).all()
-    indexed_videos = len(indexed_rows)
-
-    latest_indexed_at = None
-    model_name = None
-    index_version = None
-    if indexed_rows:
-        latest = max(
-            indexed_rows,
-            key=lambda row: row.indexed_at or datetime.fromtimestamp(0, tz=timezone.utc),
-        )
-        latest_indexed_at = latest.indexed_at if isinstance(latest.indexed_at, datetime) else None
-        model_name = latest.embedding_model if isinstance(latest.embedding_model, str) else None
-        index_version = latest.index_version if isinstance(latest.index_version, str) else None
-
-    return schemas.SemanticMapStatus(
-        total_videos=total_videos,
-        indexed_videos=indexed_videos,
-        missing_videos=max(total_videos - indexed_videos, 0),
-        latest_indexed_at=latest_indexed_at,
-        model_name=model_name,
-        index_version=index_version,
-    )
+    return {
+        "mode": "full" if mode == "full" else "incremental",
+        "total_videos_considered": len(videos),
+        "candidates_indexed": len(candidates),
+        "points_written": written,
+        "model_name": DEFAULT_MODEL_NAME,
+        "index_version": PIPELINE_VERSION,
+        "fallback_used": False,
+        "fallback_reason": None,
+        "indexed_at": now.isoformat(),
+    }

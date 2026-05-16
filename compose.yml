@@ -2,29 +2,48 @@ services:
   backend:
     restart: unless-stopped
     build:
-      context: ./backend
-      args:
-        # To enable GPU: https://download.pytorch.org/whl/cu124
-        TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
+      context: .
+      dockerfile: backend/Dockerfile
     volumes:
       # Do not edit the next line. To change the media location, edit MEDIA_DIR in the .env file
       - ${MEDIA_DIR}:/data
       - ./thumbnails:/app/thumbnails
       - ./database:/app/database
     environment:
-      MEMORYVAULT_BASE: /data
-      THUMBNAILS_DIR: /app/thumbnails
-      DATABASE_URL: sqlite:////app/database/app.db
+      MEMORYVAULT_BASE: ${MEMORYVAULT_BASE}
+      THUMBNAILS_DIR: ${THUMBNAILS_DIR}
+      DATABASE_URL: ${DATABASE_URL}
       CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
-      LOG_LEVEL: INFO
+      LOG_LEVEL: ${LOG_LEVEL}
     ports:
       - "8000:8000"
+
+  worker:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+      args:
+        # To enable GPU: https://download.pytorch.org/whl/cu124
+        TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
+    volumes:
+      - ${MEDIA_DIR}:/data
+      - ./thumbnails:/app/thumbnails
+      - ./database:/app/database
+    environment:
+      MEMORYVAULT_BASE: ${MEMORYVAULT_BASE}
+      THUMBNAILS_DIR: ${THUMBNAILS_DIR}
+      DATABASE_URL: ${DATABASE_URL}
+      WORKER_POLL_INTERVAL: "5"
+      LOG_LEVEL: ${LOG_LEVEL}
+    depends_on:
+      - backend
 
   frontend:
     restart: unless-stopped
     build: ./frontend
     environment:
       API_URL: http://backend:8000
-      PUBLIC_API_URL: http://localhost:8000
+      PUBLIC_API_URL: ${PUBLIC_API_URL}
     ports:
       - "8765:3000"

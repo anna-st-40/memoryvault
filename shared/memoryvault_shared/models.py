@@ -1,7 +1,8 @@
 from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey
 from sqlalchemy.sql import func
 
-from app.database import Base
+from memoryvault_shared.database import Base
+
 
 class Video(Base):
     __tablename__ = "videos"
@@ -42,6 +43,20 @@ class ScanJob(Base):
     status = Column(String, nullable=False, default="pending")
     error_message = Column(String, nullable=True)
     video_id = Column(Integer, ForeignKey("videos.id"), nullable=True)
+    enqueued_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class ReindexJob(Base):
+    __tablename__ = "reindex_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mode = Column(String, nullable=False, default="incremental")
+    limit = Column(Integer, nullable=True)
+    status = Column(String, nullable=False, default="pending")
+    error_message = Column(String, nullable=True)
+    result_json = Column(String, nullable=True)
     enqueued_at = Column(DateTime(timezone=True), server_default=func.now())
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)

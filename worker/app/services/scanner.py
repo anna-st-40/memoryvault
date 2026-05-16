@@ -1,9 +1,7 @@
 """Background video scanner for MemoryVault.
 
-Discovers new video files in the new/ and raw/ directories, then runs
-the full processing pipeline (sort/remux if needed, WhisperX transcription,
-thumbnail, DB insert) in a single-threaded ThreadPoolExecutor so it doesn't
-block the API.
+Processes ScanJob records from the database: remux/sort if needed, then runs
+the full pipeline (WhisperX transcription, thumbnail, DB insert).
 
 Directory roles:
   new/        Drop zone. Files here are sorted on next scan:
@@ -22,25 +20,23 @@ import re
 import shutil
 import subprocess
 import time
-from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app import models
-from app.database import SessionLocal
+from memoryvault_shared import models
+from memoryvault_shared.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
 # --- Config ---
-_base = os.getenv("MEMORYVAULT_BASE", "/data")
+_base = os.environ["MEMORYVAULT_BASE"]
 NEW_DIR: str = os.path.join(_base, "new")
 ORIGINALS_DIR: str = os.path.join(_base, "originals")
 RAW_DIR: str = os.path.join(_base, "raw")
-THUMBNAILS_DIR: str = os.getenv("THUMBNAILS_DIR", "/app/thumbnails")
+THUMBNAILS_DIR: str = os.environ["THUMBNAILS_DIR"]
 _WHISPER_DEVICE = "cpu"
 _WHISPER_COMPUTE_TYPE = "int8"
 
@@ -48,10 +44,7 @@ SCAN_EXTENSIONS: frozenset[str] = frozenset(
     {".mp4", ".mov", ".mts", ".mkv", ".avi", ".m4v", ".mpg", ".mpeg"}
 )
 
-# Single worker — WhisperX large-v3 is ~6GB RAM; one video at a time is appropriate.
-_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="scanner")
-
-# Cached WhisperX model. No lock needed because max_workers=1.
+# Cached WhisperX model — reused across jobs in the same worker process.
 _whisper_cache: dict[str, Any] = {}
 
 _MONTH_MAP = {
@@ -94,10 +87,7 @@ def _get_file_creation_time(path: Path) -> float:
 
 
 def _is_stable(path: str) -> bool:
-    """
-    Verify that a file isn't currently being written to.
-    Return True if file size and mtime are unchanged after 5 seconds.
-    """
+    """Return True if file size and mtime are unchanged after 5 seconds."""
     try:
         s1 = os.stat(path)
         if s1.st_size == 0:
@@ -252,145 +242,7 @@ def _compute_originals_target(source_path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-def discover_and_enqueue() -> int:
-    """Walk new/ and raw/, create ScanJob rows for new files, submit to executor.
-
-    Files in new/ are sorted first (MTS → remux to raw/ + archive to originals/,
-    others → move to raw/) before transcription.  Files already in raw/ are
-    transcribed directly.  originals/ is never scanned.
-
-    Returns the count of newly enqueued jobs.
-    """
-    db: Session = SessionLocal()
-    try:
-        known_sources = {r[0] for r in db.query(models.ScanJob.source_path).all()}
-        known_video_paths = {r[0] for r in db.query(models.Video.path).all()}
-
-        new_jobs: list[models.ScanJob] = []
-
-        # Scan new/ — files here need to be sorted into raw/ (and originals/ for MTS).
-        if os.path.isdir(NEW_DIR):
-            for dirpath, _, filenames in os.walk(NEW_DIR):
-                for fname in filenames:
-                    if fname.startswith("._"):
-                        continue
-                    if Path(fname).suffix.lower() not in SCAN_EXTENSIONS:
-                        continue
-                    full_path = os.path.join(dirpath, fname)
-                    if full_path in known_sources:
-                        continue
-                    new_jobs.append(models.ScanJob(
-                        source_path=full_path,
-                        raw_path=None,
-                        needs_remux=1,
-                        status="pending",
-                    ))
-
-        # Scan raw/ for files that are already in place and just need transcription.
-        if os.path.isdir(RAW_DIR):
-            for dirpath, _, filenames in os.walk(RAW_DIR):
-                for fname in filenames:
-                    if fname.startswith("._"):
-                        continue
-                    if Path(fname).suffix.lower() not in SCAN_EXTENSIONS:
-                        continue
-                    full_path = os.path.join(dirpath, fname)
-                    if full_path in known_sources or full_path in known_video_paths:
-                        continue
-                    new_jobs.append(models.ScanJob(
-                        source_path=full_path,
-                        raw_path=full_path,
-                        needs_remux=0,
-                        status="pending",
-                    ))
-
-        for job in new_jobs:
-            db.add(job)
-        db.flush()  # populate job.id before submitting
-
-        for job in new_jobs:
-            _executor.submit(_process_job, job.id)
-
-        db.commit()
-        logger.info("Enqueued %d new scan jobs", len(new_jobs))
-        return len(new_jobs)
-    except Exception:
-        logger.exception("Error during discovery")
-        db.rollback()
-        return 0
-    finally:
-        db.close()
-
-
-def resume_incomplete_jobs() -> int:
-    """On startup, resubmit any jobs that never finished.
-
-    - pending:    never started (e.g. server restarted before the executor picked them up)
-    - processing: interrupted mid-run; reset to pending so _process_job starts clean
-    """
-    db: Session = SessionLocal()
-    try:
-        jobs = db.query(models.ScanJob).filter(
-            models.ScanJob.status.in_(["pending", "processing"])
-        ).all()
-        for job in jobs:
-            job.status = "pending"
-            job.started_at = None
-            job.finished_at = None
-        db.commit()
-        job_ids = [job.id for job in jobs]
-    finally:
-        db.close()
-
-    for job_id in job_ids:
-        _executor.submit(_process_job, job_id)
-
-    if job_ids:
-        logger.info("Resumed %d incomplete job(s) from previous session", len(job_ids))
-    return len(job_ids)
-
-
-def retry_failed_jobs() -> int:
-    """Reset all error-status jobs to pending and resubmit to the executor."""
-    db: Session = SessionLocal()
-    try:
-        jobs = db.query(models.ScanJob).filter(
-            models.ScanJob.status == "error"
-        ).all()
-        for job in jobs:
-            job.status = "pending"
-            job.error_message = None
-            job.started_at = None
-            job.finished_at = None
-        db.commit()
-        job_ids = [job.id for job in jobs]
-    finally:
-        db.close()
-
-    for job_id in job_ids:
-        _executor.submit(_process_job, job_id)
-
-    return len(job_ids)
-
-
-def get_scan_summary(db: Session) -> dict[str, int]:
-    """Return job counts grouped by status."""
-    statuses = [r[0] for r in db.query(models.ScanJob.status).all()]
-    counts = Counter(statuses)
-    return {
-        "total": len(statuses),
-        "pending": counts.get("pending", 0),
-        "processing": counts.get("processing", 0),
-        "done": counts.get("done", 0),
-        "error": counts.get("error", 0),
-    }
-
-
-# ---------------------------------------------------------------------------
-# Worker (runs in executor thread — must create its own DB session)
+# Worker (called from the polling loop — creates its own DB session)
 # ---------------------------------------------------------------------------
 
 def _process_job(job_id: int) -> None:
@@ -411,9 +263,6 @@ def _process_job(job_id: int) -> None:
             return
 
         # --- Prepare stage (new/ files only) ---
-        # Sort the file from new/ into its final location(s):
-        #   MTS  → remux MP4 to raw/, move original MTS to originals/
-        #   other → move directly to raw/
         if job.needs_remux:
             target_raw = _compute_raw_target(source_path)
             ext = Path(source_path).suffix.lower()
@@ -426,7 +275,6 @@ def _process_job(job_id: int) -> None:
                     else:
                         logger.info("Raw target already exists, skipping remux: %s", target_raw)
 
-                    # Archive the original MTS (idempotent — skip if already moved)
                     originals_target = _compute_originals_target(source_path)
                     if not os.path.exists(originals_target) and os.path.exists(source_path):
                         Path(originals_target).parent.mkdir(parents=True, exist_ok=True)
@@ -448,7 +296,7 @@ def _process_job(job_id: int) -> None:
 
         raw_path = str(job.raw_path)
 
-        # --- Skip if already in DB (e.g. raw/ scan ran first in same batch) ---
+        # --- Skip if already in DB ---
         existing = db.query(models.Video).filter(models.Video.path == raw_path).first()
         if existing is not None:
             logger.info("Video already in DB, skipping transcription: %s", raw_path)
@@ -539,53 +387,3 @@ def _fail(db: Session, job: models.ScanJob, message: str) -> None:
     job.finished_at = datetime.now(timezone.utc)
     db.commit()
     logger.error("Job %d failed: %s", job.id, message)
-
-
-# ---------------------------------------------------------------------------
-# Re-transcription (replaces transcript for an existing video)
-# ---------------------------------------------------------------------------
-
-def enqueue_retranscribe(video_id: int, path: str) -> None:
-    _executor.submit(_retranscribe_job, video_id, path)
-
-
-def _retranscribe_job(video_id: int, path: str) -> None:
-    db: Session = SessionLocal()
-    try:
-        logger.info("Re-transcribing video id=%d", video_id)
-        transcription = _transcribe(path)
-
-        metadata = _get_video_metadata(path)
-        duration = metadata.get("duration")
-        if duration is not None:
-            transcription = _trim_hallucinations(transcription, duration)
-
-        video = db.query(models.Video).filter(models.Video.id == video_id).first()
-        if video is None:
-            logger.error("Re-transcribe: video id=%d not found in DB", video_id)
-            return
-
-        # Replace transcript text
-        video.transcript_text = transcription.get("text", "")
-
-        # Replace all segments
-        db.query(models.TranscriptSegment).filter(
-            models.TranscriptSegment.video_id == video_id
-        ).delete()
-
-        for seg in transcription.get("segments", []):
-            db.add(models.TranscriptSegment(
-                video_id=video_id,
-                segment_index=int(seg["id"]),
-                start_ms=int(seg["start"] * 1000),
-                end_ms=int(seg["end"] * 1000),
-                original_text=str(seg["text"]),
-            ))
-
-        db.commit()
-        logger.info("Re-transcription complete for video id=%d", video_id)
-    except Exception:
-        logger.exception("Re-transcription failed for video id=%d", video_id)
-        db.rollback()
-    finally:
-        db.close()

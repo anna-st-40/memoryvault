@@ -130,3 +130,18 @@ class ConcatenateRequest(BaseModel):
     video_ids: list[int]
     output_filename: str
     title: str | None = None
+
+
+class ReindexJobStatus(BaseModel):
+    id: int
+    mode: str
+    limit: int | None = None
+    status: str
+    error_message: str | None = None
+    result_json: str | None = None
+    enqueued_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+    class Config:
+        from_attributes = True

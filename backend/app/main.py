@@ -1,6 +1,5 @@
 import logging
 import os
-from contextlib import asynccontextmanager
 from pathlib import Path
 import subprocess
 from fastapi import FastAPI, Depends, HTTPException
@@ -9,9 +8,11 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
-from app.database import Base, engine, get_db
-from app import models, schemas
-from app.services.semantic_indexing import get_semantic_map_status, reindex_semantic_map
+from collections import Counter
+
+from memoryvault_shared.database import Base, engine, get_db
+from memoryvault_shared import models
+from app import schemas
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -21,15 +22,7 @@ logging.basicConfig(
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    from app.services.scanner import resume_incomplete_jobs
-    resume_incomplete_jobs()
-    yield
-
-
-app = FastAPI(title="MemoryVault API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="MemoryVault API", version="0.1.0")
 
 # Configure CORS
 # In production (Docker), requests come through nginx
@@ -175,7 +168,7 @@ def concatenate_videos(req: schemas.ConcatenateRequest, db: Session = Depends(ge
     import shutil
     import tempfile
     from pathlib import Path
-    from app.services.scanner import _parse_filename_title, RAW_DIR
+    from app.config import parse_filename_title, RAW_DIR
 
     if len(req.video_ids) < 2:
         raise HTTPException(status_code=400, detail="At least 2 video IDs are required")
@@ -248,7 +241,7 @@ def concatenate_videos(req: schemas.ConcatenateRequest, db: Session = Depends(ge
     new_video = models.Video(
         path=output_path,
         filename=req.output_filename,
-        title=req.title if req.title is not None else _parse_filename_title(req.output_filename),
+        title=req.title if req.title is not None else parse_filename_title(req.output_filename),
         recorded_at=last_video.recorded_at,
         duration_sec=total_duration,
         transcript_text=combined_transcript,
@@ -415,28 +408,105 @@ def read_semantic_map_points(db: Session = Depends(get_db)):
 
 @app.get("/semantic-map/status", response_model=schemas.SemanticMapStatus)
 def read_semantic_map_status(db: Session = Depends(get_db)):
-    return get_semantic_map_status(db)
+    from datetime import datetime, timezone
+    total_videos = db.query(models.Video).count()
+    indexed_rows = db.query(models.VideoSemanticIndex).all()
+    indexed_videos = len(indexed_rows)
+
+    latest_indexed_at = None
+    model_name = None
+    index_version = None
+    if indexed_rows:
+        latest = max(
+            indexed_rows,
+            key=lambda row: row.indexed_at or datetime.fromtimestamp(0, tz=timezone.utc),
+        )
+        latest_indexed_at = latest.indexed_at if isinstance(latest.indexed_at, datetime) else None
+        model_name = latest.embedding_model if isinstance(latest.embedding_model, str) else None
+        index_version = latest.index_version if isinstance(latest.index_version, str) else None
+
+    return schemas.SemanticMapStatus(
+        total_videos=total_videos,
+        indexed_videos=indexed_videos,
+        missing_videos=max(total_videos - indexed_videos, 0),
+        latest_indexed_at=latest_indexed_at,
+        model_name=model_name,
+        index_version=index_version,
+    )
 
 
-@app.post("/semantic-map/reindex", response_model=schemas.SemanticMapReindexResponse)
+@app.post("/semantic-map/reindex", response_model=schemas.ReindexJobStatus, status_code=202)
 def post_semantic_map_reindex(request: schemas.SemanticMapReindexRequest, db: Session = Depends(get_db)):
-    return reindex_semantic_map(db, mode=request.mode, limit=request.limit)
+    job = models.ReindexJob(mode=request.mode, limit=request.limit)
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+@app.get("/semantic-map/reindex/jobs", response_model=list[schemas.ReindexJobStatus])
+def list_reindex_jobs(skip: int = 0, limit: int = 20, db: Session = Depends(get_db)):
+    return (
+        db.query(models.ReindexJob)
+        .order_by(models.ReindexJob.enqueued_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 
 # --- Scan Endpoints ---
 
 @app.post("/scan", status_code=202)
-def trigger_scan():
-    """Sort files from new/ into raw/ (and originals/ for MTS), then queue raw/ files for transcription."""
-    from app.services.scanner import discover_and_enqueue
-    enqueued = discover_and_enqueue()
-    return {"enqueued": enqueued, "message": "Processing started in background"}
+def trigger_scan(db: Session = Depends(get_db)):
+    """Walk new/ and raw/, create ScanJob records for new files. The worker picks them up."""
+    from app.config import RAW_DIR
+    SCAN_EXTENSIONS = frozenset({".mp4", ".mov", ".mts", ".mkv", ".avi", ".m4v", ".mpg", ".mpeg"})
+    NEW_DIR = os.path.join(os.getenv("MEMORYVAULT_BASE", "/data"), "new")
+
+    known_sources = {r[0] for r in db.query(models.ScanJob.source_path).all()}
+    known_video_paths = {r[0] for r in db.query(models.Video.path).all()}
+    new_jobs = []
+
+    for scan_dir, needs_remux, raw_path_fn in [
+        (NEW_DIR, 1, lambda p: None),
+        (RAW_DIR, 0, lambda p: p),
+    ]:
+        if not os.path.isdir(scan_dir):
+            continue
+        for dirpath, _, filenames in os.walk(scan_dir):
+            for fname in filenames:
+                if fname.startswith("._"):
+                    continue
+                if Path(fname).suffix.lower() not in SCAN_EXTENSIONS:
+                    continue
+                full_path = os.path.join(dirpath, fname)
+                if full_path in known_sources or full_path in known_video_paths:
+                    continue
+                new_jobs.append(models.ScanJob(
+                    source_path=full_path,
+                    raw_path=raw_path_fn(full_path),
+                    needs_remux=needs_remux,
+                    status="pending",
+                ))
+
+    for job in new_jobs:
+        db.add(job)
+    db.commit()
+    return {"enqueued": len(new_jobs), "message": "Jobs queued; worker will pick them up"}
 
 
 @app.get("/scan/status", response_model=schemas.ScanSummary)
 def get_scan_status(db: Session = Depends(get_db)):
-    from app.services.scanner import get_scan_summary
-    return get_scan_summary(db)
+    statuses = [r[0] for r in db.query(models.ScanJob.status).all()]
+    counts = Counter(statuses)
+    return schemas.ScanSummary(
+        total=len(statuses),
+        pending=counts.get("pending", 0),
+        processing=counts.get("processing", 0),
+        done=counts.get("done", 0),
+        error=counts.get("error", 0),
+    )
 
 
 @app.get("/scan/jobs", response_model=list[schemas.ScanJobStatus])
@@ -453,8 +523,13 @@ def list_scan_jobs(
 
 
 @app.post("/scan/retry", status_code=202)
-def retry_scan_errors():
-    """Requeue all error-status scan jobs."""
-    from app.services.scanner import retry_failed_jobs
-    count = retry_failed_jobs()
-    return {"message": f"Requeued {count} failed jobs"}
+def retry_scan_errors(db: Session = Depends(get_db)):
+    """Reset all error-status scan jobs to pending; the worker will pick them up."""
+    jobs = db.query(models.ScanJob).filter(models.ScanJob.status == "error").all()
+    for job in jobs:
+        job.status = "pending"
+        job.error_message = None
+        job.started_at = None
+        job.finished_at = None
+    db.commit()
+    return {"message": f"Requeued {len(jobs)} failed jobs"}

@@ -2,6 +2,7 @@
 .env
 
 # Database
+database/
 *.db
 *.db-journal
 *.db-shm

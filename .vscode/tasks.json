@@ -8,7 +8,24 @@
             "options": {
                 "cwd": "${workspaceFolder}/backend",
                 "env": {
-                    "MEMORYVAULT_BASE": "${workspaceFolder}/test_volume"
+                    "DATABASE_URL": "sqlite:///${workspaceFolder}/database/app.db",
+                    "MEMORYVAULT_BASE": "${workspaceFolder}/test_volume",
+                    "THUMBNAILS_DIR": "${workspaceFolder}/thumbnails"
+                }
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Start Worker",
+            "type": "shell",
+            "command": "python -m app.main",
+            "options": {
+                "cwd": "${workspaceFolder}/worker",
+                "env": {
+                    "DATABASE_URL": "sqlite:///${workspaceFolder}/database/app.db",
+                    "MEMORYVAULT_BASE": "${workspaceFolder}/test_volume",
+                    "THUMBNAILS_DIR": "${workspaceFolder}/thumbnails"
                 }
             },
             "isBackground": true,
@@ -28,6 +45,7 @@
             "label": "Start All",
             "dependsOn": [
                 "Start Backend",
+                "Start Worker",
                 "Start Frontend"
             ],
             "problemMatcher": []
