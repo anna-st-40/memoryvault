@@ -48,7 +48,7 @@ function basename(path: string): string {
 export default function JobsPage() {
     const [jobs, setJobs] = useState<ScanJob[]>([]);
     const [summary, setSummary] = useState<ScanSummary | null>(null);
-    const [filter, setFilter] = useState<Filter>('all');
+    const [filter, setFilter] = useState<Filter>('active');
     const [loading, setLoading] = useState(true);
     const [retryState, setRetryState] = useState<'idle' | 'loading' | 'done'>('idle');
     const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
@@ -150,7 +150,7 @@ export default function JobsPage() {
 
                 {/* Filter strip */}
                 <div className="flex gap-1">
-                    {(['all', 'active', 'error'] as Filter[]).map((f) => (
+                    {(['active', 'all', 'error'] as Filter[]).map((f) => (
                         <button
                             key={f}
                             onClick={() => setFilter(f)}

@@ -30,7 +30,7 @@ export default function RootLayout({
     >
       <body className="flex h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-950">
         <Sidebar />
-        <div className="flex flex-1 flex-col overflow-y-auto">
+        <div id="main-scroll" className="flex flex-1 flex-col overflow-y-auto">
           {children}
         </div>
       </body>

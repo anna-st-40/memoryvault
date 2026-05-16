@@ -154,7 +154,13 @@ export default function VideoCard({ video, searchQuery, editMode, selected, onTo
     }
 
     return (
-        <Link href={`/videos/${video.id}`}>
+        <Link
+            href={`/videos/${video.id}`}
+            onClick={() => {
+                const el = document.getElementById('main-scroll');
+                if (el) sessionStorage.setItem('homeScrollY', String(el.scrollTop));
+            }}
+        >
             {cardContent}
         </Link>
     );

@@ -70,6 +70,17 @@ export default function Home() {
         fetchVideos();
     }, []);
 
+    useEffect(() => {
+        if (!loading) {
+            const saved = sessionStorage.getItem('homeScrollY');
+            if (saved) {
+                const el = document.getElementById('main-scroll');
+                if (el) el.scrollTop = Number(saved);
+                sessionStorage.removeItem('homeScrollY');
+            }
+        }
+    }, [loading]);
+
     async function handleScan() {
         try {
             setScanning(true);
