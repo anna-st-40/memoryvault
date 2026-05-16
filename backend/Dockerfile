@@ -10,7 +10,6 @@ RUN pip install /shared/
 COPY backend/pyproject.toml backend/poetry.lock ./
 RUN pip install poetry && \
     poetry config virtualenvs.create false && \
-    poetry lock --no-update && \
     poetry install --no-root --only main
 
 COPY backend/ .
