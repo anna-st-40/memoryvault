@@ -19,7 +19,7 @@
         {
             "label": "Start Worker",
             "type": "shell",
-            "command": "python -m app.main",
+            "command": "[ -d .venv ] || python3.13 -m venv .venv && .venv/bin/pip install -q ../shared && .venv/bin/pip install -q -e . && .venv/bin/python -m app.main",
             "options": {
                 "cwd": "${workspaceFolder}/worker",
                 "env": {

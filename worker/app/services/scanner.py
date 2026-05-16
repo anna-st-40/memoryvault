@@ -107,7 +107,7 @@ def _transcribe(file_path: str, model_name: str = "large-v3") -> dict[str, Any]:
         _whisper_cache[model_name] = whisperx.load_model(
             model_name, device=_WHISPER_DEVICE, compute_type=_WHISPER_COMPUTE_TYPE
         )
-    logger.info("Transcribing %s ...", file_path)
+    logger.info("Transcribing %s ...", file_path.split("/")[-1])
     audio = whisperx.load_audio(file_path)
     kwargs: dict[str, Any] = {"batch_size": 16}
     result = _whisper_cache[model_name].transcribe(audio, **kwargs)
@@ -258,7 +258,9 @@ def _process_job(job_id: int) -> None:
 
         source_path = str(job.source_path)
 
-        if not _is_stable(source_path):
+        # If the file was already moved to raw/ in a previous attempt, check stability there.
+        stability_path = str(job.raw_path) if job.raw_path and os.path.exists(str(job.raw_path)) else source_path
+        if not _is_stable(stability_path):
             _fail(db, job, "File failed stability check (size changed or file is empty)")
             return
 
@@ -366,7 +368,7 @@ def _process_job(job_id: int) -> None:
         job.video_id = video.id
         job.finished_at = datetime.now(timezone.utc)
         db.commit()
-        logger.info("Processed %s → Video id=%d", raw_path, video.id)
+        logger.info("Processed %s → Video id=%d", raw_path.split("/")[-1], video.id)
 
     except Exception:
         logger.exception("Unexpected error processing job %d", job_id)
