@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import SemanticMemoryMapClient from '@/components/map/SemanticMemoryMapClient';
+import ReindexPrompt from '@/components/map/ReindexPrompt';
 import { getSemanticMapPoints } from '@/lib/semantic-map';
+import type { SemanticMapPoint } from '@/lib/types';
 
 export const metadata: Metadata = {
     title: 'Semantic Memory Map | MemoryVault',
@@ -10,7 +12,19 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 export default async function SemanticMemoryMapPage() {
-    const points = await getSemanticMapPoints();
+    let points: SemanticMapPoint[] = [];
+    let needsReindex = false;
+
+    try {
+        points = await getSemanticMapPoints();
+    } catch (err) {
+        const message = err instanceof Error ? err.message : '';
+        if (message.includes('409') && message.toLowerCase().includes('incomplete')) {
+            needsReindex = true;
+        } else {
+            throw err;
+        }
+    }
 
     return (
         <main className="flex flex-1 flex-col px-4 py-8 sm:px-6 lg:px-8">
@@ -23,7 +37,7 @@ export default async function SemanticMemoryMapPage() {
                 </p>
             </header>
 
-            <SemanticMemoryMapClient points={points} />
+            {needsReindex ? <ReindexPrompt /> : <SemanticMemoryMapClient points={points} />}
         </main>
     );
 }
