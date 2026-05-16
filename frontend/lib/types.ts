@@ -96,3 +96,14 @@ export interface ScanSummary {
     done: number;
     error: number;
 }
+
+export interface SemanticSearchResult {
+    video_id: number;
+    similarity: number;
+    title: string;
+    summary: string;
+    date: string | null;
+    duration_sec: number | null;
+    thumbnail_url: string | null;
+    video_url: string | null;
+}

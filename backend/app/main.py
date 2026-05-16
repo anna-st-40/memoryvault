@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from pathlib import Path
@@ -13,6 +14,8 @@ from collections import Counter
 from memoryvault_shared.database import Base, engine, get_db
 from memoryvault_shared import models
 from app import schemas
+
+_embedding_model = None # Lazy load the embedding model only when needed
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -453,6 +456,57 @@ def list_reindex_jobs(skip: int = 0, limit: int = 20, db: Session = Depends(get_
         .limit(limit)
         .all()
     )
+
+
+@app.post("/semantic-map/search", response_model=list[schemas.SemanticSearchResult])
+def search_semantic_map(request: schemas.SemanticSearchRequest, db: Session = Depends(get_db)):
+    global _embedding_model
+
+    index_rows = db.query(models.VideoSemanticIndex).all()
+    if not index_rows:
+        raise HTTPException(status_code=503, detail="No videos have been indexed yet. Run POST /semantic-map/reindex first.")
+
+    if _embedding_model is None:
+        from sentence_transformers import SentenceTransformer
+        _embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+
+    import numpy as np
+
+    query_vec = _embedding_model.encode([request.query], normalize_embeddings=True)[0]
+
+    video_ids = [row.video_id for row in index_rows]
+    videos = db.query(models.Video).filter(models.Video.id.in_(video_ids)).all()
+    video_by_id = {v.id: v for v in videos}
+
+    scored: list[tuple[float, models.VideoSemanticIndex]] = []
+    for row in index_rows:
+        if not row.embedding_json:
+            continue
+        try:
+            doc_vec = np.array(json.loads(row.embedding_json), dtype=np.float32)
+        except (ValueError, TypeError):
+            continue
+        scored.append((float(np.dot(query_vec, doc_vec)), row))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    results: list[schemas.SemanticSearchResult] = []
+    for similarity, row in scored[: request.limit]:
+        video = video_by_id.get(row.video_id)
+        if video is None:
+            continue
+        summary_text = row.summary_text if isinstance(row.summary_text, str) else None
+        results.append(schemas.SemanticSearchResult(
+            video_id=video.id,
+            similarity=similarity,
+            title=_build_title(video),
+            summary=summary_text or _build_summary(video),
+            date=video.recorded_at if isinstance(video.recorded_at, str) else None,
+            duration_sec=float(video.duration_sec) if isinstance(video.duration_sec, (int, float)) else None,
+            thumbnail_url=_build_thumbnail_url(video),
+            video_url=f"/videos/{video.id}",
+        ))
+    return results
 
 
 # --- Scan Endpoints ---

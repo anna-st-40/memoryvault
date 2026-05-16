@@ -145,3 +145,19 @@ class ReindexJobStatus(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SemanticSearchRequest(BaseModel):
+    query: str
+    limit: int = 10
+
+
+class SemanticSearchResult(BaseModel):
+    video_id: int
+    similarity: float
+    title: str
+    summary: str
+    date: str | None = None
+    duration_sec: float | None = None
+    thumbnail_url: str | None = None
+    video_url: str | None = None

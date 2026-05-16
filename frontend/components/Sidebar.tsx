@@ -35,6 +35,15 @@ function JobsIcon() {
     );
 }
 
+function SearchIcon() {
+    return (
+        <svg className="h-4.5 w-4.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+    );
+}
+
 function GearIcon() {
     return (
         <svg className="h-4.5 w-4.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -115,9 +124,9 @@ export default function Sidebar() {
         setReindexState('loading');
         setReindexMessage('');
         try {
-            const result = await triggerReindex('full');
+            await triggerReindex('full');
             setReindexState('success');
-            setReindexMessage(`Indexed ${result.processed} video${result.processed === 1 ? '' : 's'}.`);
+            setReindexMessage('Reindex started in the background.');
         } catch {
             setReindexState('error');
             setReindexMessage('Reindex failed. Check the backend logs.');
@@ -250,6 +259,7 @@ export default function Sidebar() {
                 <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
                     <NavItem href="/" active={pathname === '/'} collapsed={collapsed} label="Grid" icon={<GridIcon />} />
                     <NavItem href="/map" active={pathname.startsWith('/map')} collapsed={collapsed} label="Map" icon={<MapIcon />} />
+                    <NavItem href="/search" active={pathname.startsWith('/search')} collapsed={collapsed} label="Search" icon={<SearchIcon />} />
                     <div className="flex-1" />
                     <NavItem href="/jobs" active={pathname.startsWith('/jobs')} collapsed={collapsed} label="Jobs" icon={<JobsIcon />} />
                 </nav>

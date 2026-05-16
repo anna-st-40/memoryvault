@@ -12,6 +12,7 @@ import type {
     TranscriptSegmentPatch,
     ScanJob,
     ScanSummary,
+    SemanticSearchResult,
 } from './types';
 
 const API_BASE_URL = '/api';
@@ -161,6 +162,13 @@ export async function triggerReindex(mode: 'full' | 'incremental' = 'full'): Pro
 
 export async function getReindexJobs(): Promise<ReindexJobStatus[]> {
     return apiFetch<ReindexJobStatus[]>('/semantic-map/reindex/jobs');
+}
+
+export async function semanticSearch(query: string, limit = 10): Promise<SemanticSearchResult[]> {
+    return apiFetch<SemanticSearchResult[]>('/semantic-map/search', {
+        method: 'POST',
+        body: JSON.stringify({ query, limit }),
+    });
 }
 
 // --- Transcript Segment Endpoints ---
