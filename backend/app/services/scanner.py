@@ -1,7 +1,7 @@
 """Background video scanner for MemoryVault.
 
 Discovers new video files in the new/ and raw/ directories, then runs
-the full processing pipeline (sort/remux if needed, Whisper transcription,
+the full processing pipeline (sort/remux if needed, WhisperX transcription,
 thumbnail, DB insert) in a single-threaded ThreadPoolExecutor so it doesn't
 block the API.
 
@@ -41,16 +41,17 @@ NEW_DIR: str = os.path.join(_base, "new")
 ORIGINALS_DIR: str = os.path.join(_base, "originals")
 RAW_DIR: str = os.path.join(_base, "raw")
 THUMBNAILS_DIR: str = os.getenv("THUMBNAILS_DIR", "/app/thumbnails")
-WHISPER_LANGUAGE: str = os.getenv("WHISPER_LANGUAGE", "en")
+_WHISPER_DEVICE = "cpu"
+_WHISPER_COMPUTE_TYPE = "int8"
 
 SCAN_EXTENSIONS: frozenset[str] = frozenset(
     {".mp4", ".mov", ".mts", ".mkv", ".avi", ".m4v", ".mpg", ".mpeg"}
 )
 
-# Single worker — Whisper turbo is ~3GB RAM; one video at a time is appropriate.
+# Single worker — WhisperX large-v3 is ~6GB RAM; one video at a time is appropriate.
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="scanner")
 
-# Cached Whisper model. No lock needed because max_workers=1.
+# Cached WhisperX model. No lock needed because max_workers=1.
 _whisper_cache: dict[str, Any] = {}
 
 _MONTH_MAP = {
@@ -108,20 +109,25 @@ def _is_stable(path: str) -> bool:
         return False
 
 
-def _transcribe(file_path: str, model_name: str = "turbo", language: str = "en") -> dict[str, Any]:
-    """Transcribe a video with Whisper, reusing the cached model."""
-    import whisper  # noqa: PLC0415 — deferred import, slow to load
+def _transcribe(file_path: str, model_name: str = "large-v3") -> dict[str, Any]:
+    """Transcribe a video with WhisperX, reusing the cached model."""
+    import whisperx  # noqa: PLC0415 — deferred import, slow to load
     if model_name not in _whisper_cache:
-        logger.info("Loading Whisper model '%s'...", model_name)
-        _whisper_cache[model_name] = whisper.load_model(model_name)
-    logger.info("Transcribing %s (language=%s) ...", file_path, language)
-    return _whisper_cache[model_name].transcribe(
-        file_path, verbose=False, language=language, compression_ratio_threshold=2.0
-    )
+        logger.info("Loading WhisperX model '%s'...", model_name)
+        _whisper_cache[model_name] = whisperx.load_model(
+            model_name, device=_WHISPER_DEVICE, compute_type=_WHISPER_COMPUTE_TYPE
+        )
+    logger.info("Transcribing %s ...", file_path)
+    audio = whisperx.load_audio(file_path)
+    kwargs: dict[str, Any] = {"batch_size": 16}
+    result = _whisper_cache[model_name].transcribe(audio, **kwargs)
+    for idx, seg in enumerate(result.get("segments", [])):
+        seg.setdefault("id", idx)
+    return result
 
 
 def _trim_hallucinations(transcription: dict[str, Any], duration: float) -> dict[str, Any]:
-    """Drop or clamp Whisper segments that start at or beyond the actual video duration."""
+    """Drop or clamp segments that start at or beyond the actual video duration."""
     segments = [
         {**seg, "end": min(seg["end"], duration)}
         for seg in transcription.get("segments", [])
@@ -454,7 +460,7 @@ def _process_job(job_id: int) -> None:
 
         # --- Transcription ---
         try:
-            transcription = _transcribe(raw_path, language=WHISPER_LANGUAGE)
+            transcription = _transcribe(raw_path)
         except Exception as exc:
             _fail(db, job, f"Transcription failed: {exc}")
             return
@@ -539,15 +545,15 @@ def _fail(db: Session, job: models.ScanJob, message: str) -> None:
 # Re-transcription (replaces transcript for an existing video)
 # ---------------------------------------------------------------------------
 
-def enqueue_retranscribe(video_id: int, path: str, language: str) -> None:
-    _executor.submit(_retranscribe_job, video_id, path, language)
+def enqueue_retranscribe(video_id: int, path: str) -> None:
+    _executor.submit(_retranscribe_job, video_id, path)
 
 
-def _retranscribe_job(video_id: int, path: str, language: str) -> None:
+def _retranscribe_job(video_id: int, path: str) -> None:
     db: Session = SessionLocal()
     try:
-        logger.info("Re-transcribing video id=%d with language=%s", video_id, language)
-        transcription = _transcribe(path, language=language)
+        logger.info("Re-transcribing video id=%d", video_id)
+        transcription = _transcribe(path)
 
         metadata = _get_video_metadata(path)
         duration = metadata.get("duration")

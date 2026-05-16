@@ -20,7 +20,6 @@ export default function VideoDetailPage() {
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [isSavingTitle, setIsSavingTitle] = useState(false);
-    const [retranscribeLang, setRetranscribeLang] = useState('en');
     const [retranscribeStatus, setRetranscribeStatus] = useState<string | null>(null);
     const [isRetranscribing, setIsRetranscribing] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -112,7 +111,7 @@ export default function VideoDetailPage() {
         setIsRetranscribing(true);
         setRetranscribeStatus(null);
         try {
-            await retranscribeVideo(videoId, retranscribeLang);
+            await retranscribeVideo(videoId);
             setRetranscribeStatus('Queued — check Jobs for progress');
             setTimeout(() => setRetranscribeStatus(null), 5000);
         } catch {
@@ -248,33 +247,13 @@ export default function VideoDetailPage() {
                         {isSettingsOpen && (
                             <div className="absolute right-0 top-full z-10 mt-1 w-64 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
                                 <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Re-transcribe</p>
-                                <div className="flex gap-2">
-                                    <select
-                                        value={retranscribeLang}
-                                        onChange={(e) => setRetranscribeLang(e.target.value)}
-                                        disabled={isRetranscribing}
-                                        className="flex-1 rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 focus:border-blue-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 disabled:opacity-50"
-                                    >
-                                        <option value="auto">auto-detect</option>
-                                        <option value="en">English</option>
-                                        <option value="fr">French</option>
-                                        <option value="de">German</option>
-                                        <option value="es">Spanish</option>
-                                        <option value="pt">Portuguese</option>
-                                        <option value="it">Italian</option>
-                                        <option value="ru">Russian</option>
-                                        <option value="ja">Japanese</option>
-                                        <option value="zh">Chinese</option>
-                                        <option value="ko">Korean</option>
-                                    </select>
-                                    <button
-                                        onClick={handleRetranscribe}
-                                        disabled={isRetranscribing}
-                                        className="rounded border border-zinc-300 px-2 py-1 text-xs text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:text-zinc-200 disabled:opacity-50"
-                                    >
-                                        {isRetranscribing ? 'Queuing…' : 'Run'}
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={handleRetranscribe}
+                                    disabled={isRetranscribing}
+                                    className="rounded border border-zinc-300 px-2 py-1 text-xs text-zinc-600 hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:text-zinc-200 disabled:opacity-50"
+                                >
+                                    {isRetranscribing ? 'Queuing…' : 'Run'}
+                                </button>
                                 {retranscribeStatus && (
                                     <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">{retranscribeStatus}</p>
                                 )}

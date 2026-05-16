@@ -126,10 +126,6 @@ class ScanSummary(BaseModel):
     error: int
 
 
-class RetranscribeRequest(BaseModel):
-    language: str = "en"
-
-
 class ConcatenateRequest(BaseModel):
     video_ids: list[int]
     output_filename: str

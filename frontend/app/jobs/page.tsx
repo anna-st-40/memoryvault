@@ -24,7 +24,9 @@ function statusBadge(status: string) {
 
 function formatTime(iso: string | null): string {
     if (!iso) return '—';
-    return new Date(iso).toLocaleString(undefined, {
+    // Treat naive datetime strings as UTC so toLocaleString converts to local time
+    const utc = /[Z+]|-\d{2}:\d{2}$/.test(iso) ? iso : iso + 'Z';
+    return new Date(utc).toLocaleString(undefined, {
         month: 'short', day: 'numeric',
         hour: '2-digit', minute: '2-digit',
     });
