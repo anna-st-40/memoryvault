@@ -15,6 +15,8 @@ function statusBadge(status: string) {
             return <span className={`${base} bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300`}>processing</span>;
         case 'done':
             return <span className={`${base} bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300`}>done</span>;
+        case 'duplicate':
+            return <span className={`${base} bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300`}>duplicate</span>;
         case 'error':
             return <span className={`${base} bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300`}>error</span>;
         default:
@@ -133,11 +135,12 @@ export default function JobsPage() {
             <div className="flex flex-col gap-4 p-6">
                 {/* Summary cards */}
                 {summary && (
-                    <div className="grid grid-cols-4 gap-3">
+                    <div className="grid grid-cols-5 gap-3">
                         {[
                             { label: 'Pending', value: summary.pending, color: 'text-zinc-600 dark:text-zinc-400' },
                             { label: 'Processing', value: summary.processing, color: 'text-blue-600 dark:text-blue-400' },
                             { label: 'Done', value: summary.done, color: 'text-green-600 dark:text-green-400' },
+                            { label: 'Duplicates', value: summary.duplicate, color: 'text-amber-600 dark:text-amber-400' },
                             { label: 'Errors', value: summary.error, color: 'text-red-600 dark:text-red-400' },
                         ].map(({ label, value, color }) => (
                             <div key={label} className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">

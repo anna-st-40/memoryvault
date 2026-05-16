@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from collections import Counter
 
+from sqlalchemy import text
 from memoryvault_shared.database import Base, engine, get_db
 from memoryvault_shared import models
 from app import schemas
@@ -22,8 +23,20 @@ logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
 )
 
-# Create database tables
+# Create database tables (new tables only — existing tables are not altered)
 Base.metadata.create_all(bind=engine)
+
+# Idempotent column migrations for existing tables
+with engine.connect() as _conn:
+    for _stmt in [
+        "ALTER TABLE videos ADD COLUMN file_hash VARCHAR",
+        "ALTER TABLE scan_jobs ADD COLUMN file_hash VARCHAR",
+    ]:
+        try:
+            _conn.execute(text(_stmt))
+            _conn.commit()
+        except Exception:
+            pass  # column already exists
 
 app = FastAPI(title="MemoryVault API", version="0.1.0")
 
@@ -285,6 +298,16 @@ def concatenate_videos(req: schemas.ConcatenateRequest, db: Session = Depends(ge
         vid_id = v.id
         vid_path = str(v.path)
         thumb_path = str(v.thumbnail_path) if v.thumbnail_path else None
+
+        # Redirect the component video's known hash to the new concatenated video so that
+        # if the original file reappears in new/ it is recognised as already processed.
+        if v.file_hash:
+            known = db.query(models.KnownFileHash).filter(
+                models.KnownFileHash.file_hash == v.file_hash
+            ).first()
+            if known is not None:
+                known.absorbed_into_video_id = new_video.id
+                db.commit()
 
         db.query(models.TranscriptSegment).filter(models.TranscriptSegment.video_id == vid_id).delete()
         db.query(models.VideoSemanticIndex).filter(models.VideoSemanticIndex.video_id == vid_id).delete()
@@ -559,6 +582,7 @@ def get_scan_status(db: Session = Depends(get_db)):
         pending=counts.get("pending", 0),
         processing=counts.get("processing", 0),
         done=counts.get("done", 0),
+        duplicate=counts.get("duplicate", 0),
         error=counts.get("error", 0),
     )
 

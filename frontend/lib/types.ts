@@ -94,6 +94,7 @@ export interface ScanSummary {
     pending: number;
     processing: number;
     done: number;
+    duplicate: number;
     error: number;
 }
 

@@ -13,6 +13,7 @@ Directory roles:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -97,6 +98,14 @@ def _is_stable(path: str) -> bool:
         return s1.st_size == s2.st_size and s1.st_mtime == s2.st_mtime
     except OSError:
         return False
+
+
+def _compute_file_hash(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _transcribe(file_path: str, model_name: str = "large-v3") -> dict[str, Any]:
@@ -264,6 +273,40 @@ def _process_job(job_id: int) -> None:
             _fail(db, job, "File failed stability check (size changed or file is empty)")
             return
 
+        # --- Content-based deduplication ---
+        try:
+            file_hash = _compute_file_hash(stability_path)
+        except Exception as exc:
+            _fail(db, job, f"Hash computation failed: {exc}")
+            return
+
+        job.file_hash = file_hash
+        db.commit()
+
+        known = db.query(models.KnownFileHash).filter(
+            models.KnownFileHash.file_hash == file_hash
+        ).first()
+        if known is not None:
+            target_id = known.absorbed_into_video_id or known.video_id
+            logger.info(
+                "Duplicate content detected for %s (hash seen before, original video_id=%s, absorbed_into=%s)",
+                source_path, known.video_id, known.absorbed_into_video_id,
+            )
+            job.status = "duplicate"
+            job.video_id = target_id
+            job.finished_at = datetime.now(timezone.utc)
+            db.commit()
+
+            # Remove the duplicate file from new/ so it doesn't accumulate there.
+            # Only delete the source; raw/ files are never touched here.
+            if job.needs_remux and os.path.exists(source_path):
+                try:
+                    os.remove(source_path)
+                    logger.info("Removed duplicate source file: %s", source_path)
+                except OSError as exc:
+                    logger.warning("Could not remove duplicate source file %s: %s", source_path, exc)
+            return
+
         # --- Prepare stage (new/ files only) ---
         if job.needs_remux:
             target_raw = _compute_raw_target(source_path)
@@ -332,14 +375,36 @@ def _process_job(job_id: int) -> None:
                 duration_sec=metadata.get("duration"),
                 transcript_text=transcription.get("text", ""),
                 thumbnail_path=None,
+                file_hash=file_hash,
             )
             db.add(video)
             db.commit()
             db.refresh(video)
         except Exception as exc:
             db.rollback()
+            # Race: another job finished the same content between our dedup check and now.
+            existing_by_hash = db.query(models.Video).filter(
+                models.Video.file_hash == file_hash
+            ).first()
+            if existing_by_hash is not None:
+                logger.info(
+                    "Race-condition duplicate for %s, linking to existing video id=%d",
+                    raw_path, existing_by_hash.id,
+                )
+                job.status = "done"
+                job.video_id = existing_by_hash.id
+                job.finished_at = datetime.now(timezone.utc)
+                db.commit()
+                return
             _fail(db, job, f"DB insert failed: {exc}")
             return
+
+        # Record the hash so it persists even if this video is later deleted or concatenated.
+        try:
+            db.add(models.KnownFileHash(file_hash=file_hash, video_id=video.id))
+            db.commit()
+        except Exception:
+            db.rollback()  # hash already recorded (shouldn't happen, but harmless)
 
         # --- Thumbnail ---
         thumbnail_path = Path(THUMBNAILS_DIR) / f"{video.id}.jpg"

@@ -123,6 +123,7 @@ class ScanSummary(BaseModel):
     pending: int
     processing: int
     done: int
+    duplicate: int
     error: int
 
 

@@ -15,6 +15,7 @@ class Video(Base):
     duration_sec = Column(Float, nullable=True)
     transcript_text = Column(String, nullable=True)
     thumbnail_path = Column(String, nullable=True)
+    file_hash = Column(String, nullable=True, unique=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -43,9 +44,20 @@ class ScanJob(Base):
     status = Column(String, nullable=False, default="pending")
     error_message = Column(String, nullable=True)
     video_id = Column(Integer, ForeignKey("videos.id"), nullable=True)
+    file_hash = Column(String, nullable=True, index=True)
     enqueued_at = Column(DateTime(timezone=True), server_default=func.now())
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class KnownFileHash(Base):
+    __tablename__ = "known_file_hashes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    file_hash = Column(String, nullable=False, unique=True, index=True)
+    video_id = Column(Integer, nullable=True)
+    absorbed_into_video_id = Column(Integer, nullable=True)
+    recorded_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class ReindexJob(Base):
