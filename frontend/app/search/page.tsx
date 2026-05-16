@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { semanticSearch } from '@/lib/api';
 import type { SemanticSearchResult } from '@/lib/types';
 
@@ -24,19 +25,23 @@ function formatDuration(seconds: number | null): string {
 }
 
 export default function SearchPage() {
-    const [query, setQuery] = useState('');
+    const searchParams = useSearchParams();
+    const [query, setQuery] = useState(() => searchParams.get('q') ?? '');
     const [results, setResults] = useState<SemanticSearchResult[] | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [searched, setSearched] = useState(false);
 
-    const handleSearch = async () => {
-        const trimmed = query.trim();
+    const handleSearch = async (searchQuery = query) => {
+        const trimmed = searchQuery.trim();
         if (!trimmed) return;
 
         setLoading(true);
         setError(null);
         setSearched(true);
+
+        const params = new URLSearchParams({ q: trimmed });
+        window.history.replaceState(null, '', `?${params.toString()}`);
 
         try {
             const data = await semanticSearch(trimmed, 10);
@@ -49,10 +54,16 @@ export default function SearchPage() {
         }
     };
 
+    useEffect(() => {
+        const q = searchParams.get('q');
+        if (q) handleSearch(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            handleSearch();
+            handleSearch(query);
         }
     };
 
@@ -73,7 +84,7 @@ export default function SearchPage() {
                         className="h-9 flex-1 rounded border border-zinc-200 bg-zinc-50 px-3 text-sm placeholder:text-zinc-400 focus:border-zinc-400 focus:bg-white focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-zinc-500 dark:focus:bg-zinc-800"
                     />
                     <button
-                        onClick={handleSearch}
+                        onClick={() => handleSearch(query)}
                         disabled={loading || !query.trim()}
                         className="flex items-center gap-1.5 rounded bg-zinc-900 px-4 py-1.5 text-sm text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
                     >
@@ -128,7 +139,7 @@ export default function SearchPage() {
                             return (
                                 <Link
                                     key={result.video_id}
-                                    href={`/videos/${result.video_id}`}
+                                    href={`/videos/${result.video_id}?from=search&q=${encodeURIComponent(query)}`}
                                     className="flex gap-4 rounded-lg border border-zinc-200 bg-white p-4 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-600"
                                 >
                                     <div className="relative h-16 w-28 shrink-0 overflow-hidden rounded-md bg-zinc-100 dark:bg-zinc-800">

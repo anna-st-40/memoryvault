@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import VideoPlayer, { type VideoPlayerRef } from '@/components/VideoPlayer';
 import TranscriptDisplay from '@/components/TranscriptDisplay';
@@ -10,7 +10,13 @@ import type { Video, TranscriptSegment } from '@/lib/types';
 
 export default function VideoDetailPage() {
     const params = useParams();
+    const searchParams = useSearchParams();
     const videoId = Number(params.id);
+
+    const fromSearch = searchParams.get('from') === 'search';
+    const searchQuery = searchParams.get('q') ?? '';
+    const backHref = fromSearch ? `/search?q=${encodeURIComponent(searchQuery)}` : '/';
+    const backLabel = fromSearch ? 'Search results' : 'All videos';
 
     const [video, setVideo] = useState<Video | null>(null);
     const [segments, setSegments] = useState<TranscriptSegment[]>([]);
@@ -170,7 +176,7 @@ export default function VideoDetailPage() {
             {/* Header/Navigation */}
             <div className="flex h-14 shrink-0 items-center border-b border-zinc-200 px-6 dark:border-zinc-800">
                 <Link
-                    href="/"
+                    href={backHref}
                     className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
                 >
                     <svg
@@ -186,7 +192,7 @@ export default function VideoDetailPage() {
                             d="M15 19l-7-7 7-7"
                         />
                     </svg>
-                    All videos
+                    {backLabel}
                 </Link>
             </div>
 
