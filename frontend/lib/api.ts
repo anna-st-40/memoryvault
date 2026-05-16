@@ -140,19 +140,27 @@ export async function retryScanErrors(): Promise<{ message: string }> {
 
 // --- Semantic Map Endpoints ---
 
-export interface ReindexResponse {
+export interface ReindexJobStatus {
+    id: number;
     mode: string;
-    processed: number;
-    skipped: number;
-    failed: number;
-    total_time_seconds: number;
+    limit: number | null;
+    status: string;
+    error_message: string | null;
+    result_json: string | null;
+    enqueued_at: string;
+    started_at: string | null;
+    finished_at: string | null;
 }
 
-export async function triggerReindex(mode: 'full' | 'incremental' = 'full'): Promise<ReindexResponse> {
-    return apiFetch<ReindexResponse>('/semantic-map/reindex', {
+export async function triggerReindex(mode: 'full' | 'incremental' = 'full'): Promise<ReindexJobStatus> {
+    return apiFetch<ReindexJobStatus>('/semantic-map/reindex', {
         method: 'POST',
         body: JSON.stringify({ mode }),
     });
+}
+
+export async function getReindexJobs(): Promise<ReindexJobStatus[]> {
+    return apiFetch<ReindexJobStatus[]>('/semantic-map/reindex/jobs');
 }
 
 // --- Transcript Segment Endpoints ---

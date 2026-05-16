@@ -2,7 +2,20 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { triggerReindex } from '@/lib/api';
+import { triggerReindex, getReindexJobs } from '@/lib/api';
+
+async function waitForJob(jobId: number): Promise<void> {
+    const MAX_POLLS = 150;
+    for (let i = 0; i < MAX_POLLS; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const jobs = await getReindexJobs();
+        const job = jobs.find((j) => j.id === jobId);
+        if (!job) throw new Error('Reindex job not found');
+        if (job.status === 'done') return;
+        if (job.status === 'error') throw new Error(job.error_message ?? 'Re-index failed');
+    }
+    throw new Error('Re-index timed out');
+}
 
 export default function ReindexPrompt() {
     const router = useRouter();
@@ -13,7 +26,8 @@ export default function ReindexPrompt() {
         setReindexing(true);
         setError(null);
         try {
-            await triggerReindex('incremental');
+            const job = await triggerReindex('incremental');
+            await waitForJob(job.id);
             router.refresh();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Re-index failed.');
