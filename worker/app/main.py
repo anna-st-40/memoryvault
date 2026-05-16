@@ -121,18 +121,6 @@ def _process_pending_reindex_jobs() -> int:
 if __name__ == "__main__":
     Base.metadata.create_all(bind=engine)
 
-    # Idempotent column migrations for existing tables
-    with engine.connect() as _conn:
-        for _stmt in [
-            "ALTER TABLE videos ADD COLUMN file_hash VARCHAR",
-            "ALTER TABLE scan_jobs ADD COLUMN file_hash VARCHAR",
-        ]:
-            try:
-                _conn.execute(text(_stmt))
-                _conn.commit()
-            except Exception:
-                pass  # column already exists
-
     logger.info("Worker started. Poll interval: %ds", POLL_INTERVAL)
     _startup_recovery()
 

@@ -26,18 +26,6 @@ logging.basicConfig(
 # Create database tables (new tables only — existing tables are not altered)
 Base.metadata.create_all(bind=engine)
 
-# Idempotent column migrations for existing tables
-with engine.connect() as _conn:
-    for _stmt in [
-        "ALTER TABLE videos ADD COLUMN file_hash VARCHAR",
-        "ALTER TABLE scan_jobs ADD COLUMN file_hash VARCHAR",
-    ]:
-        try:
-            _conn.execute(text(_stmt))
-            _conn.commit()
-        except Exception:
-            pass  # column already exists
-
 app = FastAPI(title="MemoryVault API", version="0.1.0")
 
 # Configure CORS
