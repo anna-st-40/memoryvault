@@ -9,9 +9,7 @@ WORKDIR /app
 COPY shared/ /shared/
 RUN pip install /shared/
 
-COPY worker/pyproject.toml ./
-RUN pip install --extra-index-url ${TORCH_INDEX_URL} whisperx sqlalchemy numpy
-
 COPY worker/ .
+RUN pip install --extra-index-url ${TORCH_INDEX_URL} .
 
 CMD ["python", "-m", "app.main"]
