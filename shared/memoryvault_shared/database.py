@@ -5,9 +5,11 @@ from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 SQLALCHEMY_DATABASE_URL = os.environ["DATABASE_URL"]
 
-engine_kwargs = {}
+engine_kwargs: dict = {}
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    from sqlalchemy.pool import NullPool
     engine_kwargs["connect_args"] = {"check_same_thread": False}
+    engine_kwargs["poolclass"] = NullPool
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_kwargs)
 
@@ -19,6 +21,7 @@ if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=10000")
         cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

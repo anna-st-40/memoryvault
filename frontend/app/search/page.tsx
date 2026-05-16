@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { semanticSearch } from '@/lib/api';
@@ -25,6 +25,14 @@ function formatDuration(seconds: number | null): string {
 }
 
 export default function SearchPage() {
+    return (
+        <Suspense>
+            <SearchContent />
+        </Suspense>
+    );
+}
+
+function SearchContent() {
     const searchParams = useSearchParams();
     const [query, setQuery] = useState(() => searchParams.get('q') ?? '');
     const [results, setResults] = useState<SemanticSearchResult[] | null>(null);
