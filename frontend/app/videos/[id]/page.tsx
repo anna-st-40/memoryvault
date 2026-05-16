@@ -166,34 +166,32 @@ export default function VideoDetailPage() {
     }
 
     return (
-        <div className="min-h-screen bg-white dark:bg-zinc-950">
+        <div className="flex flex-1 flex-col bg-white dark:bg-zinc-950">
             {/* Header/Navigation */}
-            <div className="border-b border-zinc-200 dark:border-zinc-800">
-                <div className="container mx-auto max-w-screen-2xl px-4 py-3 sm:px-6 lg:px-8">
-                    <Link
-                        href="/"
-                        className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
+            <div className="flex h-14 shrink-0 items-center border-b border-zinc-200 px-6 dark:border-zinc-800">
+                <Link
+                    href="/"
+                    className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
+                >
+                    <svg
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                     >
-                        <svg
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M15 19l-7-7 7-7"
-                            />
-                        </svg>
-                        All videos
-                    </Link>
-                </div>
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15 19l-7-7 7-7"
+                        />
+                    </svg>
+                    All videos
+                </Link>
             </div>
 
             {/* Main content */}
-            <div className="container mx-auto max-w-screen-2xl px-4 py-8 sm:px-6 lg:px-8">
+            <div className="px-6 py-8">
                 <div className="mb-6 flex items-start justify-between gap-4">
                     <div className="min-w-0">
                         {isEditingTitle ? (
@@ -215,14 +213,14 @@ export default function VideoDetailPage() {
                         ) : (
                             <h1
                                 onClick={startEditingTitle}
-                                className="mb-1 cursor-pointer rounded px-3 py-1.5 text-xl font-semibold text-zinc-900 transition-colors hover:bg-zinc-100 dark:text-zinc-50 dark:hover:bg-zinc-900"
+                                className="mb-1 cursor-pointer text-xl font-semibold text-zinc-900 transition-colors hover:text-zinc-600 dark:text-zinc-50 dark:hover:text-zinc-300"
                                 title="Click to edit title"
                             >
                                 {video.title ?? video.filename}
                             </h1>
                         )}
                         {video.recorded_at && (
-                            <p className="px-3 text-sm text-zinc-400 dark:text-zinc-500">
+                            <p className="text-sm text-zinc-400 dark:text-zinc-500">
                                 {new Date(video.recorded_at).toLocaleDateString('en-US', {
                                     year: 'numeric',
                                     month: 'long',

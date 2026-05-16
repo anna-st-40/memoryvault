@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import { getScanJobs, getScanStatus, retryScanErrors } from '@/lib/api';
+import { getScanJobs, getScanStatus, retryScanErrors, deleteScanJob } from '@/lib/api';
 import type { ScanJob, ScanSummary } from '@/lib/types';
 
 type Filter = 'all' | 'active' | 'error';
@@ -51,6 +51,7 @@ export default function JobsPage() {
     const [filter, setFilter] = useState<Filter>('all');
     const [loading, setLoading] = useState(true);
     const [retryState, setRetryState] = useState<'idle' | 'loading' | 'done'>('idle');
+    const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -69,6 +70,17 @@ export default function JobsPage() {
 
     useEffect(() => { load(); }, [load]);
 
+    const handleDelete = async (jobId: number) => {
+        setDeletingIds(prev => new Set(prev).add(jobId));
+        try {
+            await deleteScanJob(jobId);
+            setJobs(prev => prev.filter(j => j.id !== jobId));
+            setSummary(prev => prev ? { ...prev, total: prev.total - 1 } : prev);
+        } finally {
+            setDeletingIds(prev => { const s = new Set(prev); s.delete(jobId); return s; });
+        }
+    };
+
     const handleRetry = async () => {
         setRetryState('loading');
         try {
@@ -83,8 +95,8 @@ export default function JobsPage() {
     return (
         <div className="flex flex-1 flex-col">
             {/* Header */}
-            <div className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between border-b border-zinc-200 bg-zinc-50 px-6 dark:border-zinc-800 dark:bg-zinc-950">
-                <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Background Jobs</h1>
+            <div className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between border-b border-zinc-200 px-6 dark:border-zinc-800 dark:bg-zinc-950">
+                <h1 className="text-sm font-semibold text-zinc-900">Background Jobs</h1>
                 <div className="flex items-center gap-2">
                     {summary && summary.error > 0 && (
                         <button
@@ -178,6 +190,7 @@ export default function JobsPage() {
                                     <th className="px-4 py-2.5 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">Status</th>
                                     <th className="px-4 py-2.5 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">Enqueued</th>
                                     <th className="px-4 py-2.5 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">Duration</th>
+                                    <th className="px-4 py-2.5" />
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -192,10 +205,22 @@ export default function JobsPage() {
                                             <td className="px-4 py-3">{statusBadge(job.status)}</td>
                                             <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">{formatTime(job.enqueued_at)}</td>
                                             <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">{formatDuration(job.started_at, job.finished_at)}</td>
+                                            <td className="px-4 py-3">
+                                                <button
+                                                    onClick={() => handleDelete(job.id)}
+                                                    disabled={job.status === 'processing' || deletingIds.has(job.id)}
+                                                    className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-red-500 disabled:opacity-30 dark:hover:bg-zinc-800 dark:hover:text-red-400"
+                                                    title="Delete job"
+                                                >
+                                                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </td>
                                         </tr>
                                         {job.status === 'error' && job.error_message && (
                                             <tr className="bg-red-50 dark:bg-red-950/20">
-                                                <td colSpan={4} className="px-4 py-2">
+                                                <td colSpan={5} className="px-4 py-2">
                                                     <p className="text-xs text-red-600 dark:text-red-400">{job.error_message}</p>
                                                 </td>
                                             </tr>

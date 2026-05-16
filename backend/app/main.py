@@ -522,6 +522,18 @@ def list_scan_jobs(
     return query.order_by(models.ScanJob.enqueued_at.desc()).offset(skip).limit(limit).all()
 
 
+@app.delete("/scan/jobs/{job_id}")
+def delete_scan_job(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(models.ScanJob).filter(models.ScanJob.id == job_id).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status == "processing":
+        raise HTTPException(status_code=409, detail="Cannot delete a job that is currently processing")
+    db.delete(job)
+    db.commit()
+    return {"message": "Deleted"}
+
+
 @app.post("/scan/retry", status_code=202)
 def retry_scan_errors(db: Session = Depends(get_db)):
     """Reset all error-status scan jobs to pending; the worker will pick them up."""

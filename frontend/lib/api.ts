@@ -130,6 +130,10 @@ export async function getScanJobs(params?: { status?: string; limit?: number }):
     return apiFetch<ScanJob[]>(`/scan/jobs${query ? `?${query}` : ''}`);
 }
 
+export async function deleteScanJob(jobId: number): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>(`/scan/jobs/${jobId}`, { method: 'DELETE' });
+}
+
 export async function retryScanErrors(): Promise<{ message: string }> {
     return apiFetch<{ message: string }>('/scan/retry', { method: 'POST' });
 }
