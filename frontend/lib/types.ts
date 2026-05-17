@@ -108,3 +108,52 @@ export interface SemanticSearchResult {
     thumbnail_url: string | null;
     video_url: string | null;
 }
+
+// --- RAG types ---
+
+export interface RagCitation {
+    chunk_id: number;
+    video_id: number;
+    video_title: string;
+    recorded_at: string | null;
+    start_ms: number;
+    end_ms: number;
+    snippet: string;
+    score: number;
+    thumbnail_url: string | null;
+    video_url: string;
+    collection: string;
+    duration_sec: number | null;
+}
+
+export interface RagAnswer {
+    answer: string;
+    citations: RagCitation[];
+    retrieved_chunk_count: number;
+    model: string;
+    embedding_model: string;
+}
+
+export interface RagStatus {
+    total_videos: number;
+    videos_with_chunks: number;
+    videos_fully_embedded: number;
+    total_chunks: number;
+    embedded_chunks: number;
+    pending_chunks: number;
+    error_chunks: number;
+    embedding_model: string | null;
+}
+
+export interface RagJobStatus {
+    id: number;
+    video_id: number;
+    video_title: string | null;
+    video_filename: string | null;
+    status: string;
+    error_message: string | null;
+    chunked_at: string | null;
+    embedded_at: string | null;
+    created_at: string;
+    updated_at: string | null;
+}

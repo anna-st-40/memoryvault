@@ -56,6 +56,18 @@ export default function VideoDetailPage() {
         }
     }, [videoId]);
 
+    // Seek to ?t=<ms> timestamp from citation deep-links
+    useEffect(() => {
+        if (!video) return;
+        const tParam = searchParams.get('t');
+        if (!tParam) return;
+        const ms = parseInt(tParam, 10);
+        if (!isNaN(ms) && ms >= 0) {
+            setCurrentTime((ms + 100) / 1000);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [video]);
+
     // Handle global spacebar to control video playback
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {

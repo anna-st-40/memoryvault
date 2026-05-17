@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, UniqueConstraint
 from sqlalchemy.sql import func
 
 from memoryvault_shared.database import Base
@@ -72,6 +72,40 @@ class ReindexJob(Base):
     enqueued_at = Column(DateTime(timezone=True), server_default=func.now())
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class TranscriptChunk(Base):
+    __tablename__ = "transcript_chunks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    video_id = Column(Integer, ForeignKey("videos.id"), nullable=False, index=True)
+    chunk_index = Column(Integer, nullable=False)
+    start_ms = Column(Integer, nullable=False)
+    end_ms = Column(Integer, nullable=False)
+    text = Column(String, nullable=False)
+    segment_ids = Column(String, nullable=False)       # JSON array of TranscriptSegment.id values
+    embedding_json = Column(String, nullable=True)     # JSON float list, null until embedded
+    embedding_model = Column(String, nullable=True)
+    embedding_dim = Column(Integer, nullable=True)
+    embedding_status = Column(String, nullable=False, default="pending")  # pending|done|error
+    embedded_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (UniqueConstraint("video_id", "chunk_index", name="uq_chunk_video_index"),)
+
+
+class RagJob(Base):
+    __tablename__ = "rag_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    video_id = Column(Integer, ForeignKey("videos.id"), unique=True, index=True, nullable=False)
+    status = Column(String, nullable=False, default="pending")  # pending|chunking|embedding|done|error
+    error_message = Column(String, nullable=True)
+    chunked_at = Column(DateTime(timezone=True), nullable=True)
+    embedded_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class VideoSemanticIndex(Base):

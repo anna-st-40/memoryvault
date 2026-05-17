@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from collections import Counter
 
-from sqlalchemy import text
 from memoryvault_shared.database import Base, engine, get_db
 from memoryvault_shared import models
 from app import schemas
@@ -479,11 +478,19 @@ def search_semantic_map(request: schemas.SemanticSearchRequest, db: Session = De
 
     if _embedding_model is None:
         from sentence_transformers import SentenceTransformer
-        _embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        from app.services.rag_retriever import EMBEDDING_MODEL
+        kwargs = {"model_kwargs": {"dtype": "auto"}} if "harrier" in EMBEDDING_MODEL else {}
+        _embedding_model = SentenceTransformer(EMBEDDING_MODEL, **kwargs)
 
     import numpy as np
 
-    query_vec = _embedding_model.encode([request.query], normalize_embeddings=True)[0]
+    from app.services.rag_retriever import EMBEDDING_MODEL, _HARRIER_QUERY_PREFIX, _BGE_QUERY_PREFIX
+    query_text = request.query
+    if "harrier" in EMBEDDING_MODEL:
+        query_text = _HARRIER_QUERY_PREFIX + request.query
+    elif EMBEDDING_MODEL.startswith("BAAI/bge"):
+        query_text = _BGE_QUERY_PREFIX + request.query
+    query_vec = _embedding_model.encode([query_text], normalize_embeddings=True)[0]
 
     video_ids = [row.video_id for row in index_rows]
     videos = db.query(models.Video).filter(models.Video.id.in_(video_ids)).all()
@@ -611,3 +618,156 @@ def retry_scan_errors(db: Session = Depends(get_db)):
         job.finished_at = None
     db.commit()
     return {"message": f"Requeued {len(jobs)} failed jobs"}
+
+
+# --- RAG Endpoints ---
+
+
+@app.post("/rag/index", response_model=schemas.RagIndexResponse, status_code=202)
+def trigger_rag_index(
+    request: schemas.RagIndexRequest = schemas.RagIndexRequest(),
+    db: Session = Depends(get_db),
+):
+    """Create/reset RagJob records so the worker will pick them up."""
+    if request.video_id is not None:
+        video = db.query(models.Video).filter(
+            models.Video.id == request.video_id
+        ).first()
+        if video is None:
+            raise HTTPException(status_code=404, detail="Video not found")
+        job = db.query(models.RagJob).filter(
+            models.RagJob.video_id == request.video_id
+        ).first()
+        if job is None:
+            job = models.RagJob(video_id=request.video_id, status="pending")
+            db.add(job)
+        else:
+            job.status = "pending"
+            job.error_message = None
+        db.commit()
+        return schemas.RagIndexResponse(enqueued=1, message="RAG indexing queued for 1 video")
+
+    # Reset all existing jobs (including done) and create jobs for videos that have none
+    jobs = db.query(models.RagJob).all()
+    for job in jobs:
+        job.status = "pending"
+        job.error_message = None
+        job.chunked_at = None
+        job.embedded_at = None
+
+    all_video_ids = {r[0] for r in db.query(models.Video.id).all()}
+    existing_job_ids = {r[0] for r in db.query(models.RagJob.video_id).all()}
+    for vid in all_video_ids - existing_job_ids:
+        new_job = models.RagJob(video_id=vid, status="pending")
+        db.add(new_job)
+        jobs.append(new_job)
+    db.commit()
+
+    return schemas.RagIndexResponse(
+        enqueued=len(jobs),
+        message=f"RAG indexing queued for {len(jobs)} video(s)",
+    )
+
+
+@app.get("/rag/status", response_model=schemas.RagStatus)
+def get_rag_status(db: Session = Depends(get_db)):
+    total_videos = db.query(models.Video).count()
+
+    videos_with_chunks = (
+        db.query(models.TranscriptChunk.video_id)
+        .distinct()
+        .count()
+    )
+
+    videos_with_any_chunks = {
+        r[0] for r in db.query(models.TranscriptChunk.video_id).distinct().all()
+    }
+    videos_with_not_done = {
+        r[0] for r in db.query(models.TranscriptChunk.video_id)
+        .filter(models.TranscriptChunk.embedding_status != "done")
+        .distinct()
+        .all()
+    }
+    videos_fully_embedded = len(videos_with_any_chunks - videos_with_not_done)
+
+    total_chunks = db.query(models.TranscriptChunk).count()
+    embedded_chunks = (
+        db.query(models.TranscriptChunk)
+        .filter(models.TranscriptChunk.embedding_status == "done")
+        .count()
+    )
+    pending_chunks = (
+        db.query(models.TranscriptChunk)
+        .filter(models.TranscriptChunk.embedding_status == "pending")
+        .count()
+    )
+    error_chunks = (
+        db.query(models.TranscriptChunk)
+        .filter(models.TranscriptChunk.embedding_status == "error")
+        .count()
+    )
+
+    # Get model name from the first embedded chunk
+    first_embedded = (
+        db.query(models.TranscriptChunk.embedding_model)
+        .filter(models.TranscriptChunk.embedding_status == "done")
+        .first()
+    )
+    model_name = first_embedded[0] if first_embedded else os.getenv("EMBEDDING_MODEL")
+
+    return schemas.RagStatus(
+        total_videos=total_videos,
+        videos_with_chunks=videos_with_chunks,
+        videos_fully_embedded=videos_fully_embedded,
+        total_chunks=total_chunks,
+        embedded_chunks=embedded_chunks,
+        pending_chunks=pending_chunks,
+        error_chunks=error_chunks,
+        embedding_model=model_name,
+    )
+
+
+@app.get("/rag/jobs", response_model=list[schemas.RagJobStatus])
+def list_rag_jobs(status: str | None = None, limit: int = 200, db: Session = Depends(get_db)):
+    q = db.query(models.RagJob, models.Video.title, models.Video.filename).join(
+        models.Video, models.RagJob.video_id == models.Video.id
+    )
+    if status:
+        q = q.filter(models.RagJob.status == status)
+    rows = q.order_by(models.RagJob.created_at.desc()).limit(limit).all()
+    return [
+        schemas.RagJobStatus(
+            id=job.id,
+            video_id=job.video_id,
+            video_title=title,
+            video_filename=filename,
+            status=job.status,
+            error_message=job.error_message,
+            chunked_at=job.chunked_at,
+            embedded_at=job.embedded_at,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+        )
+        for job, title, filename in rows
+    ]
+
+
+@app.post("/rag/ask", response_model=schemas.RagAnswer)
+def rag_ask(request: schemas.RagAskRequest, db: Session = Depends(get_db)):
+    from app.services.rag_service import ask
+    from app.services.rag_retriever import ModelMismatchError
+    from app.services.llm_client import OllamaUnavailableError  # noqa: PLC0415
+
+    try:
+        return ask(query=request.query, db=db, top_k=request.top_k)
+    except ModelMismatchError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except OllamaUnavailableError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The local AI model is not available. "
+                "Make sure Ollama is running and the model is pulled. "
+                f"Details: {exc}"
+            ),
+        )

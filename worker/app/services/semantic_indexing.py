@@ -10,7 +10,7 @@ from memoryvault_shared import models
 # Note: Increment the version when making changes that affect the geometry or embedding semantics, to trigger reindexing.
 PIPELINE_VERSION = "v0"
 
-DEFAULT_MODEL_NAME = os.getenv("SEMANTIC_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+DEFAULT_MODEL_NAME = os.getenv("EMBEDDING_MODEL", "microsoft/harrier-oss-v1-0.6b")
 
 
 def _build_source_text(video: models.Video) -> str:
@@ -37,7 +37,8 @@ def _embed_texts(texts: list[str]) -> list[tuple[float, float, int, list[float]]
     from sklearn.cluster import KMeans
     from sklearn.decomposition import PCA
 
-    model = SentenceTransformer(DEFAULT_MODEL_NAME)
+    kwargs = {"model_kwargs": {"dtype": "auto"}} if "harrier" in DEFAULT_MODEL_NAME else {}
+    model = SentenceTransformer(DEFAULT_MODEL_NAME, **kwargs)
     embeddings_np = model.encode(texts, normalize_embeddings=True, convert_to_numpy=True)
 
     n_points = len(texts)

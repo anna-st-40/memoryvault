@@ -15,6 +15,10 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
       LOG_LEVEL: ${LOG_LEVEL}
+      OLLAMA_URL: ${OLLAMA_URL}
+      OLLAMA_MODEL: ${OLLAMA_MODEL}
+      OLLAMA_TIMEOUT_SEC: ${OLLAMA_TIMEOUT_SEC}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
     ports:
       - "8000:8000"
 
@@ -36,6 +40,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       WORKER_POLL_INTERVAL: "5"
       LOG_LEVEL: ${LOG_LEVEL}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
     depends_on:
       - backend
 
@@ -44,6 +49,5 @@ services:
     build: ./frontend
     environment:
       API_URL: http://backend:8000
-      PUBLIC_API_URL: ${PUBLIC_API_URL}
     ports:
       - "8765:3000"

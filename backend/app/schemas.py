@@ -162,3 +162,65 @@ class SemanticSearchResult(BaseModel):
     duration_sec: float | None = None
     thumbnail_url: str | None = None
     video_url: str | None = None
+
+# ── RAG schemas ──────────────────────────────────────────────────────────────
+
+class RagAskRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+
+class RagCitation(BaseModel):
+    chunk_id: int
+    video_id: int
+    video_title: str
+    recorded_at: str | None = None
+    start_ms: int
+    end_ms: int
+    snippet: str
+    score: float
+    thumbnail_url: str | None = None
+    video_url: str
+    collection: str
+    duration_sec: float | None = None
+
+
+class RagAnswer(BaseModel):
+    answer: str
+    citations: list[RagCitation]
+    retrieved_chunk_count: int
+    model: str
+    embedding_model: str
+
+
+class RagIndexRequest(BaseModel):
+    video_id: int | None = None
+
+
+class RagIndexResponse(BaseModel):
+    enqueued: int
+    message: str
+
+
+class RagStatus(BaseModel):
+    total_videos: int
+    videos_with_chunks: int
+    videos_fully_embedded: int
+    total_chunks: int
+    embedded_chunks: int
+    pending_chunks: int
+    error_chunks: int
+    embedding_model: str | None = None
+
+
+class RagJobStatus(BaseModel):
+    id: int
+    video_id: int
+    video_title: str | None = None
+    video_filename: str | None = None
+    status: str
+    error_message: str | None = None
+    chunked_at: datetime | None = None
+    embedded_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime | None = None

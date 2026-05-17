@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { triggerScan, triggerReindex } from '@/lib/api';
+import { triggerScan, triggerReindex, triggerRagIndex } from '@/lib/api';
 
 type ScanState = 'idle' | 'loading' | 'success' | 'error';
 
@@ -35,11 +35,12 @@ function JobsIcon() {
     );
 }
 
-function SearchIcon() {
+
+function SparkleIcon() {
     return (
         <svg className="h-4.5 w-4.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                d="M12 2 C9.5 9.5 9.5 9.5 2 12 C9.5 14.5 9.5 14.5 12 22 C14.5 14.5 14.5 14.5 22 12 C14.5 9.5 14.5 9.5 12 2 Z" />
         </svg>
     );
 }
@@ -85,6 +86,8 @@ export default function Sidebar() {
     const [scanMessage, setScanMessage] = useState('');
     const [reindexState, setReindexState] = useState<ScanState>('idle');
     const [reindexMessage, setReindexMessage] = useState('');
+    const [ragIndexState, setRagIndexState] = useState<ScanState>('idle');
+    const [ragIndexMessage, setRagIndexMessage] = useState('');
     const pathname = usePathname();
     const settingsButtonRef = useRef<HTMLButtonElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
@@ -134,6 +137,29 @@ export default function Sidebar() {
             setTimeout(() => {
                 setReindexState('idle');
                 setReindexMessage('');
+                setSettingsOpen(false);
+            }, 3000);
+        }
+    };
+
+    const handleRagIndex = async () => {
+        setRagIndexState('loading');
+        setRagIndexMessage('');
+        try {
+            const result = await triggerRagIndex();
+            setRagIndexState('success');
+            setRagIndexMessage(
+                result.enqueued === 0
+                    ? 'All memories already re-embedded.'
+                    : `Re-embedding ${result.enqueued} video${result.enqueued === 1 ? '' : 's'}…`
+            );
+        } catch {
+            setRagIndexState('error');
+            setRagIndexMessage('Re-embedding failed. Check the backend logs.');
+        } finally {
+            setTimeout(() => {
+                setRagIndexState('idle');
+                setRagIndexMessage('');
                 setSettingsOpen(false);
             }, 3000);
         }
@@ -217,6 +243,30 @@ export default function Sidebar() {
                             {reindexMessage}
                         </p>
                     )}
+
+                    <button
+                        onClick={handleRagIndex}
+                        disabled={ragIndexState === 'loading'}
+                        className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                    >
+                        {ragIndexState === 'loading' ? (
+                            <svg className="h-4 w-4 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                        ) : (
+                            <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                        )}
+                        {ragIndexState === 'loading' ? 'Re-embedding memories…' : 'Re-embed memories'}
+                    </button>
+
+                    {ragIndexMessage && (
+                        <p className={`px-3 pb-2 text-xs ${ragIndexState === 'error' ? 'text-red-500' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                            {ragIndexMessage}
+                        </p>
+                    )}
                 </div>
             </div>,
             document.body
@@ -259,7 +309,8 @@ export default function Sidebar() {
                 <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
                     <NavItem href="/" active={pathname === '/'} collapsed={collapsed} label="Grid" icon={<GridIcon />} />
                     <NavItem href="/map" active={pathname.startsWith('/map')} collapsed={collapsed} label="Map" icon={<MapIcon />} />
-                    <NavItem href="/search" active={pathname.startsWith('/search')} collapsed={collapsed} label="Search" icon={<SearchIcon />} />
+                    {/* <NavItem href="/search" active={pathname.startsWith('/search')} collapsed={collapsed} label="Search" icon={<SearchIcon />} /> */}
+                    <NavItem href="/ask" active={pathname.startsWith('/ask')} collapsed={collapsed} label="Ask" icon={<SparkleIcon />} />
                     <div className="flex-1" />
                     <NavItem href="/jobs" active={pathname.startsWith('/jobs')} collapsed={collapsed} label="Jobs" icon={<JobsIcon />} />
                 </nav>

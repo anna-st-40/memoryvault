@@ -254,7 +254,7 @@ def _compute_originals_target(source_path: str) -> str:
 # Worker (called from the polling loop — creates its own DB session)
 # ---------------------------------------------------------------------------
 
-def _process_job(job_id: int) -> None:
+def process_job(job_id: int) -> None:
     db: Session = SessionLocal()
     try:
         job = db.query(models.ScanJob).filter(models.ScanJob.id == job_id).first()
@@ -348,6 +348,7 @@ def _process_job(job_id: int) -> None:
             job.status = "done"
             job.video_id = existing.id
             job.finished_at = datetime.now(timezone.utc)
+            _upsert_rag_job(db, existing.id)
             db.commit()
             return
 
@@ -432,6 +433,7 @@ def _process_job(job_id: int) -> None:
         job.status = "done"
         job.video_id = video.id
         job.finished_at = datetime.now(timezone.utc)
+        _upsert_rag_job(db, video.id)
         db.commit()
         logger.info("Processed %s → Video id=%d", raw_path.split("/")[-1], video.id)
 
@@ -446,6 +448,15 @@ def _process_job(job_id: int) -> None:
             pass
     finally:
         db.close()
+
+
+def _upsert_rag_job(db: Session, video_id: int) -> None:
+    """Create a pending RagJob for video_id if one doesn't already exist."""
+    existing = db.query(models.RagJob).filter(
+        models.RagJob.video_id == video_id
+    ).first()
+    if existing is None:
+        db.add(models.RagJob(video_id=video_id, status="pending"))
 
 
 def _fail(db: Session, job: models.ScanJob, message: str) -> None:

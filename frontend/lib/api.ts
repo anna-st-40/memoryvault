@@ -13,6 +13,9 @@ import type {
     ScanJob,
     ScanSummary,
     SemanticSearchResult,
+    RagAnswer,
+    RagStatus,
+    RagJobStatus,
 } from './types';
 
 const API_BASE_URL = '/api';
@@ -216,4 +219,37 @@ export async function deleteTranscriptSegment(
     return apiFetch<{ message: string }>(`/transcript-segments/${segmentId}`, {
         method: 'DELETE',
     });
+}
+
+// --- RAG Endpoints ---
+
+export async function askMemories(
+    query: string,
+    top_k: number = 5
+): Promise<RagAnswer> {
+    return apiFetch<RagAnswer>('/rag/ask', {
+        method: 'POST',
+        body: JSON.stringify({ query, top_k }),
+    });
+}
+
+export async function getRagStatus(): Promise<RagStatus> {
+    return apiFetch<RagStatus>('/rag/status');
+}
+
+export async function triggerRagIndex(
+    videoId?: number
+): Promise<{ enqueued: number; message: string }> {
+    return apiFetch<{ enqueued: number; message: string }>('/rag/index', {
+        method: 'POST',
+        body: JSON.stringify(videoId !== undefined ? { video_id: videoId } : {}),
+    });
+}
+
+export async function getRagJobs(params?: { status?: string; limit?: number }): Promise<RagJobStatus[]> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.limit != null) query.set('limit', String(params.limit));
+    const qs = query.size ? '?' + query : '';
+    return apiFetch<import('./types').RagJobStatus[]>(`/rag/jobs${qs}`);
 }
