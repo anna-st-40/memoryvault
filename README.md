@@ -2,6 +2,8 @@
 
 A self-hosted video archive with automatic transcription and a semantic memory map.
 
+**🎥 [Watch devlogs on YouTube](https://www.youtube.com/playlist?list=PLMxvlZgcDLSk)**
+
 ## Services
 
 | Service | Directory | Port |
