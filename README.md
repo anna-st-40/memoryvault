@@ -2,7 +2,9 @@
 
 A self-hosted video archive with automatic transcription and a semantic memory map.
 
-**🎥 [Watch devlogs on YouTube](https://www.youtube.com/playlist?list=PLMxvlZgcDLSk)**
+**🎥 [Watch devlogs on YouTube ↓](https://www.youtube.com/playlist?list=PLMxvlZgcDLSk)**
+
+[<img width="640" height="360" alt="MemoryVault devlog thumbnail" src="https://github.com/user-attachments/assets/4dd09c00-dbbf-452a-8cdc-a544d4bfebe9" />](https://www.youtube.com/playlist?list=PLMxvlZgcDLSk)
 
 ## Services
 
